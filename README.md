@@ -4,6 +4,12 @@ transmit images (and optionally sound) over a 915MHz LoRa link to a base station
 
 Hardware: two [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) boards (ESP32-S3R8 + SX1262, with or without the OLED), the [Adafruit 613 weatherproof serial camera with IR LEDs](https://www.adafruit.com/product/613) (VC0706) and, for audio only, an [Adafruit I2S MEMS microphone](https://www.adafruit.com/product/3421). The original build (Heltec V2) reached about 1km in a dense wooded place.
 
+## Wiring
+
+![Wiring diagram: Heltec V4-R8 remote node with Adafruit 613 camera, 5 V boost converter, LiPo, solar panel and optional I2S microphone; local node needs no wiring](docs/images/wiring.svg)
+
+Pin details, power budget and camera specs: [docs/hardware.md](docs/hardware.md).
+
 ## Quick start
 
 ```sh

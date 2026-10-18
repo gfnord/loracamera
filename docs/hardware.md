@@ -56,6 +56,8 @@ From the KCT8103L truth table:
 
 All peripherals use free header GPIOs. The ESP32-S3 pins are **3.3 V only and not 5 V tolerant**.
 
+![Wiring diagram of the remote node: Adafruit 613 camera, 5 V boost converter, LiPo, solar panel and optional I2S microphone](images/wiring.svg)
+
 | Peripheral pin | V4-R8 pin | Define in `src/remote/main.cpp` |
 |---|---|---|
 | Camera TX (out of camera) | GPIO47 (header J2) | `CAMERATX_BOARDRX` |
@@ -109,6 +111,12 @@ Current draw (datasheet, USB powered):
 | Camera on, daylight (5 V) | 75 mA |
 | Camera on, dark: IR LEDs lit (5 V) | 325 mA |
 
-The camera needs **5 V**, and only while a picture is taken: about 4 s of fixed start-up and power-off delays plus the image readout. On USB power the board's `5V` pin can supply it. Heltec rates that 5 V output for 500 mA, and the schematic feeds it straight from USB (VUSB → fuse → `VDD_5V`). On a LiPo there is no 5 V rail, so add a 5 V boost converter for the camera, switched by `CAMERA_ONOFF`.
+The camera needs **5 V**, and only while a picture is taken: about 4 s of fixed start-up and power-off delays plus the image readout. On USB power the board's `5V` pin can supply it. Heltec rates that 5 V output for 500 mA, and the schematic feeds it straight from USB (VUSB → fuse → `VDD_5V`). On a LiPo there is no 5 V rail, so add a 5 V boost converter for the camera, wired as in the [diagram](#remote-node-wiring):
+
+- **VIN+** from the battery + lead (a Y-split of the battery cable). The board's headers don't expose the battery voltage.
+- **GND** to board GND (J2 pin 1), not to the battery − lead: the board switches battery − through a protection MOSFET (Q4).
+- **EN** from GPIO41 (`CAMERA_ONOFF`, J3 pin 8). Pick a module whose enable input is active-high and accepts 3.3 V logic, rated for at least 1 A out (325 mA at 5 V with the IR LEDs lit, plus start-up surge).
+
+Because the boost converter is fed from the battery only, fit the LiPo even when testing on USB.
 
 The default TX setting gives about 20 dBm at the antenna (see [configuration.md](configuration.md#tx-power)). The remote node never sleeps: it stays in receive mode waiting for requests.

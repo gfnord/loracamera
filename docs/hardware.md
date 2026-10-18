@@ -192,6 +192,31 @@ All figures are estimates from the datasheet currents above, not measurements.
 - **Per motion event: ~2–3 mAh,** as above, plus up to a few seconds of receive while the base station finishes.
 - So 100 events a day cost about 0.3 Ah, which a 2–3 W panel covers easily, and a 3000 mAh cell rides out about 10 sunless days at that rate. Continuous motion (a busy path, branches moving in the wind or sun on them) retriggers back to back, up to ~90 pictures an hour (~0.2 Ah per hour): aim and mask the PIR accordingly.
 
+**Worked example: 5 pictures a day (`motion = 1`).** Charge per picture, for a ~20 KB re-encoded image (80 packets) at the default SF7 and TX power:
+
+| Part of the cycle | Current × time | Day | Night (IR LEDs) |
+|---|---|---|---|
+| Board awake in receive: boot, camera start-up, ~10 s image readout at 115200 baud, re-encoding, ~19 s transfer | ~75 mA × ~35 s | 0.73 mAh | 0.73 mAh |
+| Camera on, 5 V through the boost converter (~85 % efficient, 3.7 V cell) | ~120 mA (day) / ~520 mA (night) × ~13 s | 0.43 mAh | 1.9 mAh |
+| Transmitting the data packets, on top of receive | (~330 − 75) mA × 80 × 0.2 s | 1.1 mAh | 1.1 mAh |
+| **Per picture** | | **~2.3 mAh** | **~3.7 mAh** |
+
+| Daily budget | 3000 mAh LiPo | 2 × 18650, 2500 mAh, in parallel (5000 mAh) |
+|---|---|---|
+| 5 pictures (all daytime … all at night) | 11.5–18.5 mAh | 11.5–18.5 mAh |
+| Deep sleep, 24 h | 1–2 mAh | 1–2 mAh |
+| Self-discharge, ~2–3 % of capacity a month | 2–3 mAh | 3.5–5 mAh |
+| **Total per day** | **~15–24 mAh** | **~16–26 mAh** |
+| Usable charge (~80 %: protection cut-off, cold, ageing) | ~2400 mAh | ~4000 mAh |
+| **Runtime without any sun** | **~100–160 days (3–5 months)** | **~155–250 days (5–8 months)** |
+
+- Self-discharge and sleep current are a quarter to a third of the daily budget, and self-discharge grows with capacity, so a bigger battery gains a little less than its size suggests: the 18650 pair has 1.7× the charge of the LiPo but lasts ~1.6× as long.
+- **The two 18650s must be in parallel (1S2P, 3.7 V).** The board's battery input takes a single cell, 3.3–4.2 V; two cells in series (7.4 V) would destroy it. Use two cells of the same model at the same voltage before joining them, a holder or a 1S protection board (bare 18650s often have no protection circuit), and a JST SH 1.25 mm lead to the board's battery connector. The boost converter's VIN+ tap goes on the pack's + lead, as with the LiPo.
+- Recharging a flat 5000 mAh pack at the ~540 mA charging limit takes ~10 hours of good sun, i.e. two or three sunny days with a 2–3 W panel.
+- **With solar**, the day's charge is replaced by 2–3 minutes at the ~540 mA charging limit, so even an overcast day keeps the battery full. Any 5 V panel within the charger's 4.7–6 V input works; the 2–3 W panel in the BOM is far more than this needs, but helps in winter and under canopy.
+- **False triggers dominate.** One hour of continuous retriggering (~90 pictures, ~0.2 Ah) uses as much as 10 days of this budget. If the SD card shows many empty frames, re-aim or mask the PIR before buying a bigger battery.
+- These are estimates from datasheet currents: the receive and TX figures were measured by Heltec on USB power, TX at 17 dBm (the default setting gives ~20 dBm at the antenna), and the sleep current isn't measured at all. Check them with a USB power meter or a µA meter on the battery lead.
+
 **With `motion = 0`** the remote node never sleeps:
 
 - **Idle receive alone uses ~1.8 Ah per day** (75 mA around the clock).

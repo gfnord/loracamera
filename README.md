@@ -2,23 +2,26 @@
 
 transmit sound &amp; image over a 915MHz LoRa link to a base station near your wifi. Currently set up to a send a frame from a serial TTL camera and a few seconds of sound from a microphone, but can be adapted for most data you want to send using LoRa directly. 
 
-I'm using two of the [Heltec WiFi LoRa 32 v2](https://heltec.org/project/wifi-lora-32/), readily available on amazon etc. I'm able to get about 1km in range in a dense wooded place from this setup.
+Hardware: two [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) boards (ESP32-S3R8 + SX1262), an [Adafruit VC0706 serial camera](https://www.adafruit.com/product/613) and an [Adafruit I2S MEMS microphone](https://www.adafruit.com/product/3421). The original build (Heltec V2) reached about 1km in a dense wooded place.
 
-The camera I'm using is [this one from Adafruit](https://www.adafruit.com/product/613), but I'm looking for better options. The library is very fiddly, I had to slow down a bunch of serial calls to get it going on an ESP32, and the camera quality is low. 
+## Quick start
 
-I'm using [this MEMS i2s microphone](https://www.adafruit.com/product/3421) as well. 
-
-`local`: esp-idf project for the device near a wifi link 
-
-`remote`: esp-idf project for the device out in a remote place 
-
-`server`: python web server to handle file uploads. Just run `listen.py` and update your local IP from local.cpp.
-
-This is set up as an esp-idf project instead of Arduino, althought I'm using the Arduino component so that the camera package and Heltec LoRa package work fine. I have a lot of trouble with the Arduino IDE when there's more than one dev board connected and would rather work in a terminal anyway. I'm sure it's easy to port this back to Arduino if you want, it's simple enough.
-
-You will want `auth.h` to exist in the local/main/ folder, with 
-
+```sh
+uv tool install platformio                   # or: pipx install platformio
+printf '#define WIFI_SSID "ssid"\n#define WIFI_PASS "pass"\n' > src/local/auth.h
+# set SERVER_URL in src/local/main.cpp to your PC's LAN IP
+pio run -e remote -t upload                  # field board
+pio run -e local  -t upload                  # wifi-side board
+python3 server/listen.py                     # saves uploads to the current directory
 ```
-#define WIFI_SSID your_ssid
-#define WIFI_PASS your_password
-```
+
+## Documentation
+
+Full documentation is in [`docs/`](docs/README.md):
+
+- [Hardware](docs/hardware.md): pin map, RF front end, remote wiring, power
+- [Getting started](docs/getting-started.md): install, configure, build, flash, monitor (incl. WSL2)
+- [Configuration](docs/configuration.md): radio, TX power, timing, pins, audio, camera
+- [Usage](docs/usage.md): upload server, deployment, output files
+- [Protocol](docs/protocol.md): LoRa packet formats and throughput
+- [Troubleshooting](docs/troubleshooting.md)

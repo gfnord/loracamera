@@ -52,10 +52,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-local/build/
-remote/build/
-local/main/auth.h
-remote/main/auth.h
+.pio/
+src/local/auth.h
 *.jpg
 audio.raw
 *.raw

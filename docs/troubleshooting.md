@@ -9,7 +9,7 @@ Go through these on the bench, with the boards a few metres apart. At very close
 3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
 4. **Link.** With both boards running, the local log shows `Receiving rft response, N packets` within ~30 s, then packet progress with RSSI.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
-6. **Audio.** After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
+6. **Audio** (only with `audio = 1`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
 
 ## Build and flash
 
@@ -43,6 +43,7 @@ The full list is in RadioLib's `src/TypeDef.h`.
 ### No `rft response`: the local node keeps printing `Receive timer timed out`
 - Is the remote node powered and does its log show the radio started?
 - Both nodes must be flashed from the **same** `HeltecV4R8.h` (frequency, BW, SF, CR, sync word).
+- If the request log says `type 1`, the local node was built with `audio = 1`. A remote node built with `audio = 0` ignores audio requests. Use the same `audio` value in `platformio.ini` for both boards.
 - A picture can take ~25 s to capture. The local node waits `MAX_RFT_RESPONSE_MS` (30 s). If you raised the resolution or slowed the camera, raise that limit too.
 - Check the antennas on both boards.
 
@@ -92,6 +93,7 @@ Two limits from the original code apply:
 If `len of frame is` reports more than 65535, switch to `VC0706_320x240` in `turnOnCamera()`.
 
 ### Audio is silent or noise
+Audio exists only in builds with `audio = 1` in `platformio.ini`, on **both** nodes.
 - The firmware reads `I2S_CHANNEL_FMT_ONLY_RIGHT`. The original ESP32 swapped left and right in this mode, and the ESP32-S3 may not. If the file is silent, change it to `I2S_CHANNEL_FMT_ONLY_LEFT` in `src/remote/main.cpp`, or tie the mic's SEL pin to 3V3.
 - Check BCLK → GPIO4, LRCL → GPIO3, DOUT → GPIO6, and that the mic has 3.3 V.
 - Too quiet or clipping: adjust `GAIN_FACTOR`.

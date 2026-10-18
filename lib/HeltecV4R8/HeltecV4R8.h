@@ -42,6 +42,11 @@ constexpr int8_t LORA_TX_POWER_DBM = 7;
 constexpr uint32_t MAX_TRANSFER_BUFFER = 125000;
 constexpr uint8_t LORA_TRANSFER_BUFFER = 250; // payload bytes per data packet (+2 header bytes)
 
+// Audio capture, set by `audio` in the [loracamera] section of platformio.ini.
+#ifndef LORACAMERA_AUDIO
+#define LORACAMERA_AUDIO 0
+#endif
+
 // unsigned int packing functions
 inline uint8_t u0(uint16_t in) { return in & 0xFF; }
 inline uint8_t u1(uint16_t in) { return in >> 8; }

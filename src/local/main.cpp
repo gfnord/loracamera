@@ -15,7 +15,6 @@ const char * password = WIFI_PASS ;
 #define CHECK_EVERY_MS 10000
 // The max the remote device will take to acquire image / audio
 #define MAX_RFT_RESPONSE_MS 30000
-#define AUDIO_SECONDS 5
 
 unsigned int counter = 0;
 
@@ -74,11 +73,14 @@ void put_to_server(uint8_t * buf, uint32_t length) {
 	HTTPClient http;
 	long time = millis();
 
+#if LORACAMERA_AUDIO
 	if(content_type == AUDIO) {
 		sprintf(put_url, "%s/audio.raw", SERVER_URL);
 		http.begin(put_url);
 		http.addHeader("Content-Type", "audio/L8");
-	} else {
+	} else
+#endif
+	{
 		sprintf(put_url, "%s/image.jpg", SERVER_URL);
 		http.begin(put_url);
 		http.addHeader("Content-Type", "image/jpg");		
@@ -202,7 +204,9 @@ void loop() {
 		Serial.printf("if packets! %d\n", packets);
 		handle_packets(packets);
 		lastCheckTime = millis();
+#if LORACAMERA_AUDIO
 		if(content_type == AUDIO) { content_type = PICTURE; } else { content_type = AUDIO; } // flip type
+#endif
 	}
 	delay(10);
 	

@@ -5,7 +5,7 @@ The project is a [PlatformIO](https://platformio.org/) project using the Arduino
 | Environment | Source | Board role |
 |---|---|---|
 | `local` | `src/local/` | Near Wi-Fi; requests data and uploads it |
-| `remote` | `src/remote/` | In the field; camera + microphone |
+| `remote` | `src/remote/` | In the field; camera (+ microphone if audio is enabled) |
 
 Both are built for the same hardware (Heltec V4-R8) from the shared library `lib/HeltecV4R8`.
 
@@ -53,6 +53,10 @@ Edit `SERVER_URL` in `src/local/main.cpp` and set it to the machine that runs `s
 
 The port is fixed at 8000 by `listen.py`. If the server runs inside WSL2, see [usage.md](usage.md#running-the-server-under-wsl2).
 
+### Audio capture (optional, off by default)
+
+The firmware sends pictures only. To also capture microphone audio, set `audio = 1` in the `[loracamera]` section of `platformio.ini`, wire the microphone, and flash **both** boards. See [configuration.md](configuration.md#audio-capture-optional).
+
 ### Everything else
 
 Radio settings, TX power, pins and timing have working defaults. They're described in [configuration.md](configuration.md). Radio settings live in one shared header, so both nodes always match.
@@ -72,7 +76,7 @@ Output goes to `.pio/build/<env>/firmware.bin`. The build uses:
 - `qio_opi` memory type for the 8 MB octal PSRAM;
 - `ARDUINO_USB_CDC_ON_BOOT=1`, so `Serial` goes to the native USB port.
 
-These build warnings are expected and harmless: deprecated I2S format constants, narrowing conversions in `Adafruit_VC0706.cpp`, and RadioLib's note about USB CDC debug output.
+These build warnings are expected and harmless: narrowing conversions in `Adafruit_VC0706.cpp`, RadioLib's note about USB CDC debug output, and (with `audio = 1`) deprecated I2S format constants.
 
 ## 4. Connect the board
 

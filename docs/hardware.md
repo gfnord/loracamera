@@ -7,7 +7,7 @@
 | 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end, 0.96" OLED. 868–928 MHz high-power model |
 | 2 | 915 MHz antenna (IPEX) | Never transmit without an antenna attached |
 | 1 | [Adafruit TTL serial JPEG camera (VC0706)](https://www.adafruit.com/product/613) | Remote node |
-| 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | Remote node |
+| 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | Remote node, **only if built with `audio = 1`** ([configuration.md](configuration.md#audio-capture-optional)) |
 | 1 | Load switch / MOSFET for the camera supply | Driven by GPIO41 (see below) |
 | 1–2 | LiPo cell (JST SH1.25 2-pin) and/or solar panel | Remote node power |
 
@@ -59,11 +59,11 @@ All peripherals use free header GPIOs. The ESP32-S3 pins are **3.3 V only and no
 | Camera TX (out of camera) | GPIO47 (header J2) | `CAMERATX_BOARDRX` |
 | Camera RX (into camera) | GPIO48 (header J2) | `CAMERARX_BOARDTX` |
 | Camera power switch control | GPIO41 (header J3) | `CAMERA_ONOFF` |
-| Mic BCLK | GPIO4 (header J3) | `I2S_BCK` |
-| Mic LRCL / WS | GPIO3 (header J3) | `I2S_LRC` |
-| Mic DOUT | GPIO6 (header J3) | `I2S_DIN` |
-| Mic 3V / GND | 3V3 / GND | |
-| Mic SEL | leave unconnected | see [troubleshooting](troubleshooting.md#audio-is-silent-or-noise) if audio is silent |
+| Mic BCLK (`audio = 1` only) | GPIO4 (header J3) | `I2S_BCK` |
+| Mic LRCL / WS (`audio = 1` only) | GPIO3 (header J3) | `I2S_LRC` |
+| Mic DOUT (`audio = 1` only) | GPIO6 (header J3) | `I2S_DIN` |
+| Mic 3V / GND (`audio = 1` only) | 3V3 / GND | |
+| Mic SEL (`audio = 1` only) | leave unconnected | see [troubleshooting](troubleshooting.md#audio-is-silent-or-noise) if audio is silent |
 
 `CAMERA_ONOFF` is a logic signal (HIGH = camera on), not a supply. Use it to drive a load switch or a MOSFET that feeds the camera's supply. The firmware switches the camera on before each picture and off afterwards.
 

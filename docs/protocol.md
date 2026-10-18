@@ -6,7 +6,7 @@ All packets are raw LoRa frames: explicit header, 2-byte CRC, sync word `0x12`. 
 
 | Name | Direction | Length | Bytes |
 |---|---|---|---|
-| Request for transmission (RFT) | local → remote | 2 | `F9 FC` = picture, `F9 FD` = audio |
+| Request for transmission (RFT) | local → remote | 2 | `F9 FC` = picture, `F9 FD` = audio (only sent and answered when built with `audio = 1`) |
 | RFT response | remote → local | 4 | `F9 C2 nL nH`, where `n` = number of data packets |
 | Packet request | local → remote | 4 | `F9 FE iL iH`, where `i` = packet index, starting at 0 |
 | Data packet | remote → local | 3–252 | `iL iH` + up to 250 payload bytes |
@@ -23,7 +23,7 @@ sequenceDiagram
     participant R as Remote (field)
     participant S as listen.py
     Note over L: every CHECK_EVERY_MS (10 s)
-    L->>R: RFT F9 FC (picture) / F9 FD (audio)
+    L->>R: RFT F9 FC (picture) / F9 FD (audio, if enabled)
     Note over R: capture into transfer_buffer<br/>(picture ≈ 25 s, audio 5 s)
     R->>L: F9 C2 n (sent 5 times, 20 ms apart)
     loop i = 0 .. n-1
@@ -32,7 +32,7 @@ sequenceDiagram
         Note over L: append to transfer_buffer,<br/>OLED shows i / n and RSSI
     end
     L->>S: HTTP PUT /image.jpg or /audio.raw
-    Note over L: switch picture ↔ audio
+    Note over L: audio = 1: switch picture ↔ audio
 ```
 
 ## Timeouts and retries (local node)
@@ -53,7 +53,8 @@ The remote node is stateless between requests. It serves any packet index from i
 
 ## Edge cases
 
-- **Capture failed:** if the camera can't take a picture, `content_length` is 0 and the remote answers `F9 C2 00 00`. The local node treats 0 packets as "nothing to do". It **doesn't** switch to audio, so it asks for a picture again after `CHECK_EVERY_MS`.
+- **Capture failed:** if the camera can't take a picture, `content_length` is 0 and the remote answers `F9 C2 00 00`. The local node treats 0 packets as "nothing to do" and asks for a picture again after `CHECK_EVERY_MS`. With `audio = 1` it doesn't switch to audio in that case.
+- **Audio request to a picture-only remote:** a remote node built with `audio = 0` ignores `F9 FD` entirely. Build both nodes with the same `audio` value.
 - **Remote busy:** the remote handles one request at a time and doesn't listen while it captures (up to ~25 s for a picture). The local node waits up to `MAX_RFT_RESPONSE_MS` for the answer.
 - **Short last packet:** if the last packet has only 1–2 payload bytes (total length < 5) and the low byte of its index is `0xF9`, the local node mistakes it for an RFT response and discards it. That only happens when `content_length % 250` is 1 or 2 and `n − 1 ≡ 249 (mod 256)`. It's rare, and it costs the last 1–2 bytes.
 - **Upload:** the HTTP status of the PUT is not checked. If the server is down, that capture is lost.

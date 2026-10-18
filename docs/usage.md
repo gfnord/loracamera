@@ -74,7 +74,7 @@ lora: 48123 bytes in 87.12s. 552.38 bytes/s.
 server: 48123 bytes in 0.41s. ...
 ```
 
-Type 0 is a picture and type 1 is audio. They alternate after each completed transfer.
+Type 0 is a picture and type 1 is audio. With the default `audio = 0` every request is type 0. With `audio = 1` the types alternate after each completed transfer.
 
 The local node prints nothing while it connects to Wi-Fi. If the log stops after boot, check `auth.h` (see [troubleshooting](troubleshooting.md#local-node-hangs-after-boot)).
 
@@ -90,7 +90,7 @@ Turning off camera
 RFT received. Content length is 48123; buffer count 250. Packets to send is 193
 Packet 0 was requested. byte_start is 0. content_length 48123
 ...
-Recording 5 seconds of audio
+Recording 5 seconds of audio                     (audio = 1 builds only)
 microphone: 110592 bytes in 5.00s. ...
 ```
 
@@ -103,6 +103,8 @@ microphone: 110592 bytes in 5.00s. ...
 `MMDDHHMM.jpg` is a JPEG from the camera (640×480 by default). Open it with any image viewer.
 
 ### Audio
+
+Only produced when both nodes are built with `audio = 1` (see [configuration.md](configuration.md#audio-capture-optional)).
 
 `MMDDHHMM.raw` is headerless PCM: **signed 16-bit little-endian, mono, 11025 Hz** (with the defaults in [configuration.md](configuration.md#audio)). The HTTP `Content-Type` header says `audio/L8`, but the data is 16-bit. Convert or play it with:
 

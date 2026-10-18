@@ -1,22 +1,27 @@
 #include <Arduino.h>
 #include <Adafruit_VC0706.h>
 #include <HeltecV4R8.h>
+#if LORACAMERA_AUDIO
 #include "driver/i2s.h"
+#endif
 
 #define SEND_REPEAT 5
 
+// Pins (free GPIOs on the V4-R8 headers)
+#define CAMERATX_BOARDRX 47
+#define CAMERARX_BOARDTX 48
+#define CAMERA_ONOFF 41
+
+#if LORACAMERA_AUDIO
 #define SAMPLE_RATE 11025
 #define AUDIO_SECONDS 5
 #define GAIN_FACTOR 2 
 #define AUDIO_FRAME_SIZE 1024
 
-// Pins (free GPIOs on the V4-R8 headers)
-#define CAMERATX_BOARDRX 47
-#define CAMERARX_BOARDTX 48
 #define I2S_BCK 4
 #define I2S_LRC 3
 #define I2S_DIN 6 // DOUT from I2S mic
-#define CAMERA_ONOFF 41
+#endif
 
 Adafruit_VC0706 * cam;
 
@@ -24,8 +29,10 @@ uint8_t transfer_buffer[MAX_TRANSFER_BUFFER];
 uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet number header
 
 uint32_t content_length = 0;
-uint32_t audio_pointer = 0;
 
+
+#if LORACAMERA_AUDIO
+uint32_t audio_pointer = 0;
 
 //i2s configuration
 i2s_config_t i2s_config = {
@@ -71,6 +78,7 @@ void read_audio(void) {
 		if(audio_pointer-1 == MAX_TRANSFER_BUFFER) audio_pointer = 0;
 	}
 }
+#endif
 
 void turnOnCamera() {
 	digitalWrite(CAMERA_ONOFF, HIGH); 
@@ -94,7 +102,9 @@ void turnOffCamera() {
 
 void setup() {
 	Serial.begin(115200);
+#if LORACAMERA_AUDIO
 	setup_i2s();
+#endif
 	vextOn();
 	if(!radioBegin()) {
 		Serial.printf("Starting LoRa failed!\n");
@@ -117,6 +127,7 @@ void print_time(const char * title, uint32_t length, long time) {
 }
 
 
+#if LORACAMERA_AUDIO
 void recordAudio() {
 	Serial.printf("Recording %d seconds of audio\n", AUDIO_SECONDS);
 	long start_time = millis();
@@ -127,6 +138,7 @@ void recordAudio() {
 	content_length = audio_pointer;
 	print_time("microphone", content_length, start_time);
 }
+#endif
 
 // Take a picture and load it into transfer bffer
 void takePicture() {
@@ -175,14 +187,17 @@ void loop() {
 		uint8_t a = request[0];
 		uint8_t b = request[1];
 		delay(20);
-		if(a==0xF9 && (b==0xFC || b==0xFD)) { 
+		if(a==0xF9 && (b==0xFC || (LORACAMERA_AUDIO && b==0xFD))) { 
 			// Both load into transfer_buffer, both set content_length
 			// both these take multiple seconds to complete, the local is waiting here
 			if(b==0xFC) { // take picture
 				takePicture();
-			} else { // record audio
+			}
+#if LORACAMERA_AUDIO
+			else { // record audio
 				recordAudio();
 			}
+#endif
 			// Now respond to the RFT with the # of packets to expect
 			uint16_t packets = content_length / LORA_TRANSFER_BUFFER;
 			if(content_length % LORA_TRANSFER_BUFFER != 0) packets++;

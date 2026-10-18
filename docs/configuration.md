@@ -1,6 +1,27 @@
 # Configuration reference
 
-All settings are compile-time constants. Change them, rebuild, and reflash. **Settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.**
+All settings are compile-time. Change them, rebuild, and reflash. **The `[loracamera]` section of `platformio.ini` and the settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.**
+
+## Audio capture (optional)
+
+Audio is **off by default**, so the link carries only pictures. To build both nodes with microphone support, set this in `platformio.ini`:
+
+```ini
+[loracamera]
+audio = 1
+```
+
+Then rebuild and reflash **both** boards. The value reaches the code as the `LORACAMERA_AUDIO` macro (`-DLORACAMERA_AUDIO=${loracamera.audio}`).
+
+| | `audio = 0` (default) | `audio = 1` |
+|---|---|---|
+| Local node requests | pictures only | pictures and audio, alternating |
+| Remote node | camera only; I2S driver and recording code are not compiled in; `F9 FD` requests are ignored | also records `AUDIO_SECONDS` of audio on `F9 FD` |
+| Microphone wiring | not needed | GPIO3/4/6, see [hardware.md](hardware.md#remote-node-wiring) |
+| Uploads | `/image.jpg` | `/image.jpg` and `/audio.raw` |
+| Cycle time (SF7) | one ≈ 48 KB image ≈ 1.4 min | adds ≈ 3.3 min of airtime for every 5 s clip (≈ 110 KB) |
+
+Both nodes must be built with the same value. A local node built with audio sends `F9 FD` requests that a picture-only remote node never answers. The local node then waits out its retries (up to ~100 min) instead of fetching pictures.
 
 ## Radio link (`lib/HeltecV4R8/HeltecV4R8.h`)
 
@@ -62,14 +83,14 @@ These are calculated with the Semtech airtime formula, not measured.
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Files are PUT to `/image.jpg` and `/audio.raw` |
+| `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw` |
 | `WIFI_SSID`, `WIFI_PASS` | from `auth.h` | 2.4 GHz network |
 | `CHECK_EVERY_MS` | `10000` | Pause after a finished transfer before the next request |
-| `MAX_RFT_RESPONSE_MS` | `30000` | How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480, per the code comment) + 1 s power-off; audio = `AUDIO_SECONDS` |
+| `MAX_RFT_RESPONSE_MS` | `30000` | How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480, per the code comment) + 1 s power-off; audio (if enabled) = `AUDIO_SECONDS` |
 | `REQUEST_TIMER` | `200` | Retries for a request, and per data packet. Must fit in a `uint8_t` (≤ 255) |
 | `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255 |
 
-The first request after boot is for a **picture**. After each completed transfer the type alternates between picture and audio.
+With the default `audio = 0`, every request is for a **picture**. With `audio = 1`, the first request after boot is for a picture, and the type then alternates between picture and audio after each completed transfer.
 
 ## Remote node (`src/remote/main.cpp`)
 
@@ -80,13 +101,15 @@ The first request after boot is for a **picture**. After each completed transfer
 | `CAMERATX_BOARDRX` | 47 | UART1 RX (camera TX) |
 | `CAMERARX_BOARDTX` | 48 | UART1 TX (camera RX) |
 | `CAMERA_ONOFF` | 41 | Camera power control, HIGH = on |
-| `I2S_BCK` | 4 | Mic bit clock |
-| `I2S_LRC` | 3 | Mic word select |
-| `I2S_DIN` | 6 | Mic data |
+| `I2S_BCK` | 4 | Mic bit clock (`audio = 1` only) |
+| `I2S_LRC` | 3 | Mic word select (`audio = 1` only) |
+| `I2S_DIN` | 6 | Mic data (`audio = 1` only) |
 
 Pick replacements only from the free pins listed in [hardware.md](hardware.md#v4-r8-pin-map): 3, 4, 6, 15, 16, 38, 39, 41, 42, 47, 48. Avoid 45 and 46, which are strapping pins, and 43/44, where the ROM bootloader prints at boot.
 
 ### Audio
+
+These apply only when built with `audio = 1` (see [Audio capture](#audio-capture-optional)).
 
 | Constant | Default | Meaning |
 |---|---|---|
@@ -112,7 +135,7 @@ Smaller resolutions transfer much faster. See the [image size limits](troublesho
 
 The transport moves any byte buffer. To send something else, such as sensor logs:
 
-1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio), for example `0xFB`. `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
+1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio, reserved even when audio is disabled), for example `0xFB`. `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
 2. **Local:** send the new byte from `request_transmission()`, which currently sends `0xFC + content_type`. Give it a URL and `Content-Type` in `put_to_server()`.
 3. **Server:** `listen.py` takes the file extension from the last three characters of the URL path, so `/data.csv` is saved as `MMDDHHMM.csv`.
 

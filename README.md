@@ -1,8 +1,8 @@
 # loracamera
 
-transmit sound &amp; image over a 915MHz LoRa link to a base station near your wifi. Currently set up to a send a frame from a serial TTL camera and a few seconds of sound from a microphone, but can be adapted for most data you want to send using LoRa directly. 
+transmit images (and optionally sound) over a 915MHz LoRa link to a base station near your wifi. Set up to send a frame from a serial TTL camera, plus a few seconds of microphone audio when audio is enabled in `platformio.ini`, but can be adapted for most data you want to send using LoRa directly. 
 
-Hardware: two [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) boards (ESP32-S3R8 + SX1262), an [Adafruit VC0706 serial camera](https://www.adafruit.com/product/613) and an [Adafruit I2S MEMS microphone](https://www.adafruit.com/product/3421). The original build (Heltec V2) reached about 1km in a dense wooded place.
+Hardware: two [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) boards (ESP32-S3R8 + SX1262), an [Adafruit VC0706 serial camera](https://www.adafruit.com/product/613) and, for audio only, an [Adafruit I2S MEMS microphone](https://www.adafruit.com/product/3421). The original build (Heltec V2) reached about 1km in a dense wooded place.
 
 ## Quick start
 
@@ -21,7 +21,7 @@ Full documentation is in [`docs/`](docs/README.md):
 
 - [Hardware](docs/hardware.md): pin map, RF front end, remote wiring, power
 - [Getting started](docs/getting-started.md): install, configure, build, flash, monitor (incl. WSL2)
-- [Configuration](docs/configuration.md): radio, TX power, timing, pins, audio, camera
+- [Configuration](docs/configuration.md): audio on/off, radio, TX power, timing, pins, camera
 - [Usage](docs/usage.md): upload server, deployment, output files
 - [Protocol](docs/protocol.md): LoRa packet formats and throughput
 - [Troubleshooting](docs/troubleshooting.md)

@@ -3,11 +3,19 @@
 #ifndef LORACAMERA_DISPLAY
 #define LORACAMERA_DISPLAY 0
 #endif
+#ifndef LORACAMERA_SDCARD
+#define LORACAMERA_SDCARD 0
+#endif
+static_assert(LORACAMERA_SDCARD == 0 || LORACAMERA_SDCARD == 1, "sdcard must be 0 or 1");
 #if LORACAMERA_DISPLAY
 #include <SSD1306Wire.h>
 #endif
+#if LORACAMERA_SDCARD
+#include "storage.h"
+#endif
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <time.h>
 
 // Wifi details & server for uploads
 #define SERVER_URL "http://192.168.0.150:8000"
@@ -17,6 +25,8 @@ const char * password = WIFI_PASS ;
 
 #define REQUEST_TIMER 200
 #define RESPONSE_TIMER 200
+// How long setup() waits for Wi-Fi before starting without it (it keeps reconnecting).
+#define WIFI_CONNECT_TIMEOUT_MS 20000
 #define CHECK_EVERY_MS 10000
 // The max the remote device will take to acquire image / audio
 #define MAX_RFT_RESPONSE_MS 30000
@@ -59,11 +69,25 @@ void setup() {
 		while(1) delay(1000);
 	}
 
-	// Set up WIFI 
+#if LORACAMERA_SDCARD
+	storageBegin();
+#endif
+
+	// Wi-Fi is needed only for uploads: don't wait forever, so pictures still reach
+	// the SD card without it. The driver keeps reconnecting in the background.
+	WiFi.setAutoReconnect(true);
 	WiFi.begin(ssid, password);
-	while(WiFi.status() != WL_CONNECTED) {
+	long wifi_start = millis();
+	while(WiFi.status() != WL_CONNECTED && millis() - wifi_start < WIFI_CONNECT_TIMEOUT_MS) {
 		delay(500);
 	}
+	if(WiFi.status() == WL_CONNECTED) {
+		Serial.printf("Wi-Fi connected, IP %s\n", WiFi.localIP().toString().c_str());
+	} else {
+		Serial.printf("Wi-Fi not connected yet; continuing, uploads wait for it\n");
+	}
+	// UTC from NTP once Wi-Fi is up; sets the SD card's file timestamps.
+	configTime(0, 0, "pool.ntp.org");
 
 
 	Serial.printf("I have %d free heap\n", ESP.getFreeHeap());
@@ -82,6 +106,10 @@ void print_time(const char * title, uint32_t length, long time) {
 
 
 void put_to_server(uint8_t * buf, uint32_t length) {
+	if(WiFi.status() != WL_CONNECTED) {
+		Serial.printf("Wi-Fi not connected, upload skipped\n");
+		return;
+	}
 	char put_url[255];
 	HTTPClient http;
 	long time = millis();
@@ -99,8 +127,11 @@ void put_to_server(uint8_t * buf, uint32_t length) {
 		http.addHeader("Content-Type", "image/jpg");		
 	}
 	http.addHeader("Content-Length", String(length));
-	http.PUT(buf,length); 
+	int code = http.PUT(buf,length); 
 	http.end();
+	if(code < 200 || code >= 300) {
+		Serial.printf("Upload failed: %s\n", code < 0 ? http.errorToString(code).c_str() : String(code).c_str());
+	}
 	print_time("server", length, time);
 }
 
@@ -209,6 +240,10 @@ void handle_packets(uint16_t packets) {
 	}
 	Serial.printf("Loaded all packets, total %d\n", read_pointer);
 	print_time("lora", read_pointer, time);
+	if(read_pointer == 0) return;
+#if LORACAMERA_SDCARD
+	storageSave(transfer_buffer, read_pointer, content_type == AUDIO ? "raw" : "jpg");
+#endif
 	put_to_server(transfer_buffer, read_pointer);
 }
 

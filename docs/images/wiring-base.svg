@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 900" width="1300" height="900">
+<rect width="1300" height="900" fill="#ffffff"/>
+<text x="30" y="40" font-family="Helvetica, Arial, sans-serif" font-size="22" text-anchor="start" font-weight="bold" fill="#1f2328">loracamera — base station wiring (local node, Heltec WiFi LoRa 32 V4-R8)</text>
+<text x="30" y="64" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="normal" fill="#57606a">microSD card for every received picture, LiPo + solar power. Schematic, not to scale. Remote node: see wiring.svg.</text>
+<rect x="470" y="170" width="360" height="480" rx="14" fill="#e9f5ee" stroke="#0b5d3b" stroke-width="3"/>
+<text x="650" y="196" font-family="Helvetica, Arial, sans-serif" font-size="15" text-anchor="middle" font-weight="bold" fill="#0b5d3b">Heltec WiFi LoRa 32 V4-R8</text>
+<text x="650" y="214" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#0b5d3b">local node (base station)</text>
+<text x="528" y="214" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#0b5d3b">J2</text>
+<text x="772" y="214" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#0b5d3b">J3</text>
+<rect x="478" y="221" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="234" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 1  GND</text>
+<circle cx="470" cy="230" r="3" fill="#57606a"/>
+<rect x="478" y="243" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 2  5V</text>
+<circle cx="470" cy="252" r="3" fill="#57606a"/>
+<rect x="478" y="265" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="278" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 3  Ve</text>
+<circle cx="470" cy="274" r="3" fill="#57606a"/>
+<rect x="478" y="287" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="300" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 4  Ve</text>
+<circle cx="470" cy="296" r="3" fill="#57606a"/>
+<rect x="478" y="309" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="322" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 5  RX 44</text>
+<circle cx="470" cy="318" r="3" fill="#57606a"/>
+<rect x="478" y="331" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="344" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 6  TX 43</text>
+<circle cx="470" cy="340" r="3" fill="#57606a"/>
+<rect x="478" y="353" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="366" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 7  RST</text>
+<circle cx="470" cy="362" r="3" fill="#57606a"/>
+<rect x="478" y="375" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="388" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 8  0 PRG</text>
+<circle cx="470" cy="384" r="3" fill="#57606a"/>
+<rect x="478" y="397" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="410" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 9  36</text>
+<circle cx="470" cy="406" r="3" fill="#57606a"/>
+<rect x="478" y="419" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="432" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">10  35</text>
+<circle cx="470" cy="428" r="3" fill="#57606a"/>
+<rect x="478" y="441" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="454" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">11  34</text>
+<circle cx="470" cy="450" r="3" fill="#57606a"/>
+<rect x="478" y="463" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="476" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">12  33</text>
+<circle cx="470" cy="472" r="3" fill="#57606a"/>
+<rect x="478" y="485" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="498" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">13  47</text>
+<circle cx="470" cy="494" r="3" fill="#57606a"/>
+<rect x="478" y="507" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="520" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">14  48</text>
+<circle cx="470" cy="516" r="3" fill="#57606a"/>
+<rect x="478" y="529" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="542" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">15  26</text>
+<circle cx="470" cy="538" r="3" fill="#57606a"/>
+<rect x="478" y="551" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="564" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">16  21</text>
+<circle cx="470" cy="560" r="3" fill="#57606a"/>
+<rect x="478" y="573" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="586" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">17  20</text>
+<circle cx="470" cy="582" r="3" fill="#57606a"/>
+<rect x="478" y="595" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="484" y="608" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">18  19</text>
+<circle cx="470" cy="604" r="3" fill="#57606a"/>
+<rect x="722" y="221" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="234" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 1  GND</text>
+<circle cx="830" cy="230" r="3" fill="#57606a"/>
+<rect x="722" y="243" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 2  3V3</text>
+<circle cx="830" cy="252" r="3" fill="#57606a"/>
+<rect x="722" y="265" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="278" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 3  3V3</text>
+<circle cx="830" cy="274" r="3" fill="#57606a"/>
+<rect x="722" y="287" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="300" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 4  37</text>
+<circle cx="830" cy="296" r="3" fill="#57606a"/>
+<rect x="722" y="309" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="322" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 5  46</text>
+<circle cx="830" cy="318" r="3" fill="#57606a"/>
+<rect x="722" y="331" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="344" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 6  45</text>
+<circle cx="830" cy="340" r="3" fill="#57606a"/>
+<rect x="722" y="353" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="366" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 7  42</text>
+<circle cx="830" cy="362" r="3" fill="#57606a"/>
+<rect x="722" y="375" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="388" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 8  41</text>
+<circle cx="830" cy="384" r="3" fill="#57606a"/>
+<rect x="722" y="397" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="410" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 9  40</text>
+<circle cx="830" cy="406" r="3" fill="#57606a"/>
+<rect x="722" y="419" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="432" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">10  39</text>
+<circle cx="830" cy="428" r="3" fill="#57606a"/>
+<rect x="722" y="441" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="454" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">11  38</text>
+<circle cx="830" cy="450" r="3" fill="#57606a"/>
+<rect x="722" y="463" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="476" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">12  1</text>
+<circle cx="830" cy="472" r="3" fill="#57606a"/>
+<rect x="722" y="485" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="498" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">13  2</text>
+<circle cx="830" cy="494" r="3" fill="#57606a"/>
+<rect x="722" y="507" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="520" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">14  3</text>
+<circle cx="830" cy="516" r="3" fill="#57606a"/>
+<rect x="722" y="529" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="542" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">15  4</text>
+<circle cx="830" cy="538" r="3" fill="#57606a"/>
+<rect x="722" y="551" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="564" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">16  5</text>
+<circle cx="830" cy="560" r="3" fill="#57606a"/>
+<rect x="722" y="573" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="586" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">17  6</text>
+<circle cx="830" cy="582" r="3" fill="#57606a"/>
+<rect x="722" y="595" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
+<text x="728" y="608" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">18  7</text>
+<circle cx="830" cy="604" r="3" fill="#57606a"/>
+<text x="650" y="330" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#57606a">ESP32-S3R8</text>
+<text x="650" y="350" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#57606a">SX1262 LoRa</text>
+<text x="650" y="370" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#57606a">Wi-Fi 2.4 GHz</text>
+<text x="650" y="390" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#57606a" font-style="italic">(OLED optional)</text>
+<rect x="532" y="624" width="56" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="560" y="638" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#1f2328">BAT</text>
+<rect x="622" y="624" width="56" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="650" y="638" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#1f2328">USB-C</text>
+<rect x="732" y="624" width="56" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="760" y="638" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#1f2328">SOLAR</text>
+<rect x="588" y="166" width="26" height="10" rx="2" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<polyline points="601,166 601,132" fill="none" stroke="#1f2328" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="590,118 612,118 601,132" fill="none" stroke="#1f2328" stroke-width="2"/>
+<text x="585" y="130" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end" font-weight="normal" fill="#1f2328">915 MHz LoRa antenna (IPEX)</text>
+<rect x="686" y="166" width="26" height="10" rx="2" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<polyline points="699,166 699,132" fill="none" stroke="#1f2328" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="688,118 710,118 699,132" fill="none" stroke="#1f2328" stroke-width="2"/>
+<text x="715" y="130" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">2.4 GHz Wi-Fi antenna (IPEX / FPC)</text>
+<rect x="1000" y="200" width="250" height="370" rx="8" fill="#f0f6ff" stroke="#0969da" stroke-width="2"/>
+<text x="1125" y="300" font-family="Helvetica, Arial, sans-serif" font-size="15" text-anchor="middle" font-weight="bold" fill="#1f2328">microSD breakout</text>
+<text x="1125" y="320" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#57606a">SPI, 3.3 V supply</text>
+<text x="1125" y="345" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">card: FAT32 (≤ 32 GB SDHC,</text>
+<text x="1125" y="361" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">or reformat larger cards)</text>
+<text x="1125" y="494" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a" font-style="italic">files: /loracam/000001.jpg …</text>
+<polyline points="830,230 1000,230" fill="none" stroke="#1f2328" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="230" r="4" fill="#1f2328"/>
+<text x="1010" y="234" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">GND</text>
+<text x="880" y="225" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">GND</text>
+<polyline points="830,252 1000,252" fill="none" stroke="#bf3989" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="252" r="4" fill="#bf3989"/>
+<text x="1010" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">3V</text>
+<text x="880" y="247" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#bf3989">3V3</text>
+<polyline points="830,384 1000,384" fill="none" stroke="#0969da" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="384" r="4" fill="#0969da"/>
+<text x="1010" y="388" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">MOSI (DI)</text>
+<text x="880" y="379" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#0969da">GPIO41 → MOSI</text>
+<polyline points="830,428 1000,428" fill="none" stroke="#0969da" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="428" r="4" fill="#0969da"/>
+<text x="1010" y="432" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">SCK (CLK)</text>
+<text x="880" y="423" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#0969da">GPIO39 → SCK</text>
+<polyline points="830,450 1000,450" fill="none" stroke="#0969da" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="450" r="4" fill="#0969da"/>
+<text x="1010" y="454" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">MISO (DO)</text>
+<text x="880" y="445" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#0969da">GPIO38 ← MISO</text>
+<polyline points="830,538 1000,538" fill="none" stroke="#0969da" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="830" cy="538" r="4" fill="#0969da"/>
+<text x="1010" y="542" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">CS</text>
+<text x="880" y="533" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#0969da">GPIO4 → CS</text>
+<rect x="330" y="740" width="240" height="80" rx="8" fill="#fff8f0" stroke="#e8740c" stroke-width="2"/>
+<text x="450" y="770" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f2328">LiPo cell 3.7 V (protected)</text>
+<text x="450" y="790" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">3.3–4.2 V, JST SH1.25 2-pin</text>
+<text x="450" y="808" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">check polarity before connecting</text>
+<polyline points="560,740 560,644" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
+<text x="566" y="700" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#57606a">BAT cable</text>
+<rect x="660" y="740" width="240" height="80" rx="8" fill="#fffbe6" stroke="#e8740c" stroke-width="2"/>
+<text x="780" y="770" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f2328">Solar panel 5 V, 2–3 W</text>
+<text x="780" y="790" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">4.7–6 V, JST SH1.25 2-pin</text>
+<text x="780" y="808" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">charges the LiPo through the board</text>
+<polyline points="760,740 760,644" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
+<text x="766" y="700" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#57606a">SOLAR cable</text>
+<text x="650" y="676" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">flash · serial log</text>
+<rect x="40" y="200" width="380" height="250" rx="8" fill="#f6f8fa" stroke="#8c959f" stroke-width="2"/>
+<text x="56" y="228" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="start" font-weight="bold" fill="#1f2328">What it does</text>
+<text x="56" y="256" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Requests pictures from the remote node over LoRa.</text>
+<text x="56" y="278" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Saves each received file to the SD card</text>
+<text x="56" y="300" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  (sdcard = 1 in platformio.ini).</text>
+<text x="56" y="322" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Uploads it to server/listen.py when Wi-Fi</text>
+<text x="56" y="344" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  is connected; without Wi-Fi it keeps</text>
+<text x="56" y="366" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  collecting to the card.</text>
+<text x="56" y="388" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Header J2 is unused; no 5 V needed.</text>
+<text x="30" y="838" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="bold" fill="#1f2328">Legend</text>
+<polyline points="30,856 58,856" fill="none" stroke="#bf3989" stroke-width="3" stroke-linejoin="round"/>
+<text x="64" y="860" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">3V3</text>
+<polyline points="112.9,856 140.9,856" fill="none" stroke="#1f2328" stroke-width="3" stroke-linejoin="round"/>
+<text x="146.9" y="860" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">GND</text>
+<polyline points="195.8,856 223.8,856" fill="none" stroke="#0969da" stroke-width="3" stroke-linejoin="round"/>
+<text x="229.8" y="860" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">SPI to the SD card</text>
+<polyline points="373.2,856 401.2,856" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
+<text x="407.2" y="860" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">JST cable</text>
+<polyline points="493.9,856 521.9,856" fill="none" stroke="#e8740c" stroke-width="3" stroke-linejoin="round"/>
+<text x="527.9" y="860" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">battery / solar</text>
+<text x="30" y="886" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• Pin numbers follow the V4-R8 datasheet (J3 pin 1 = GND); highlighted pins are used. GPIO38/39/41 are also on the GNSS connector: leave it empty.</text>
+</svg>

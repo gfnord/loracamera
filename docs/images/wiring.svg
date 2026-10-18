@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1020" width="1300" height="1020">
 <rect width="1300" height="1020" fill="#ffffff"/>
 <text x="30" y="40" font-family="Helvetica, Arial, sans-serif" font-size="22" text-anchor="start" font-weight="bold" fill="#1f2328">loracamera — wiring (Heltec WiFi LoRa 32 V4-R8)</text>
-<text x="30" y="64" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="normal" fill="#57606a">Remote node (field) on the left; the local node (base station) needs no wiring. Schematic, not to scale.</text>
+<text x="30" y="64" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="normal" fill="#57606a">Remote node (field). The local node (base station) has its own diagram: wiring-base.svg. Schematic, not to scale.</text>
 <rect x="470" y="170" width="360" height="480" rx="14" fill="#e9f5ee" stroke="#0b5d3b" stroke-width="3"/>
 <text x="650.0" y="196" font-family="Helvetica, Arial, sans-serif" font-size="15" text-anchor="middle" font-weight="bold" fill="#0b5d3b">Heltec WiFi LoRa 32 V4-R8</text>
 <text x="650.0" y="214" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="normal" fill="#0b5d3b">remote node</text>
@@ -204,7 +204,7 @@
 <text x="1110" y="676" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#0b5d3b">Local node (base station)</text>
 <rect x="1020" y="730" width="150" height="70" rx="10" fill="#e9f5ee" stroke="#0b5d3b" stroke-width="2"/>
 <text x="1095" y="762" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#0b5d3b">V4-R8</text>
-<text x="1095" y="780" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#0b5d3b">no wiring</text>
+<text x="1095" y="780" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#0b5d3b">see wiring-base.svg</text>
 <polyline points="1050,730 1050,712" fill="none" stroke="#1f2328" stroke-width="2" stroke-linejoin="round"/>
 <polygon points="1042,704 1058,704 1050,712" fill="none" stroke="#1f2328" stroke-width="2"/>
 <polyline points="1140,730 1140,712" fill="none" stroke="#1f2328" stroke-width="2" stroke-linejoin="round"/>
@@ -212,7 +212,7 @@
 <text x="1000" y="698" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#57606a">915 MHz</text>
 <text x="1150" y="698" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#57606a">2.4 GHz Wi-Fi</text>
 <polyline points="1095,800 1095,822" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
-<text x="1095" y="838" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#1f2328">USB-C 5 V supply (≥ 500 mA)</text>
+<text x="1095" y="838" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#1f2328">microSD card, LiPo + solar</text>
 <text x="1095" y="854" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a" font-style="italic">OLED optional (display = 1)</text>
 <text x="30" y="890" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="bold" fill="#1f2328">Legend</text>
 <polyline points="95,886 123,886" fill="none" stroke="#d1242f" stroke-width="3" stroke-linejoin="round"/>

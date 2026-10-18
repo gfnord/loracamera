@@ -42,8 +42,8 @@ By default WSL2 sits behind NAT, so the ESP32 can't reach a server running insid
 ## 2. Bring up the nodes
 
 1. Attach antennas to **both** boards before powering them.
-2. Power the **remote** node: battery, solar, or USB. It initialises the radio and waits for requests.
-3. Power the **local** node within Wi-Fi range. It starts the radio (after resetting the OLED, with `display = 1`), joins Wi-Fi, then sends its first request after ~10 s.
+2. Power the **remote** node: battery + solar, or USB. It initialises the radio and waits for requests.
+3. Power the **local** node (base station): battery + solar, or USB. It starts the radio (after resetting the OLED, with `display = 1`), mounts the SD card (with `sdcard = 1`), tries Wi-Fi for up to 20 s, then sends its first request after ~10 s. Without Wi-Fi it still collects pictures to the SD card.
 
 The order doesn't matter. The local node keeps retrying until the remote node answers.
 
@@ -52,7 +52,7 @@ The order doesn't matter. The local node keeps retrying until the remote node an
 Progress goes to the **serial log** (below). Boards built with `display = 1` also draw it on the **OLED**, which stays blank until the first transfer and then shows:
 
 ```
-57 / 193 [29.53%]
+49 / 50 [98.00%]
  rssi: -87
 ```
 
@@ -61,22 +61,25 @@ That's the packet just received, the total packet count, and the RSSI of that pa
 **Serial log** of a normal picture cycle (`pio device monitor`; the numbers are examples):
 
 ```
+SD card: 30436 MB free, next file 000001
+Wi-Fi connected, IP 192.168.0.42
 I have 123456 free heap
 Sending request for transmission of type 0...
-Receiving rft response, 193 packets
-if packets! 193
-Got back 193 packets from the rft
-0 / 193 [0.00%] rssi: -87
+Receiving rft response, 50 packets
+if packets! 50
+Got back 50 packets from the rft
+0 / 50 [0.00%] rssi: -87
 ...
-192 / 193 [99.48%] rssi: -86
-Loaded all packets, total 48123
-lora: 48123 bytes in 87.12s. 552.38 bytes/s.
-server: 48123 bytes in 0.41s. ...
+49 / 50 [98.00%] rssi: -86
+Loaded all packets, total 12345
+lora: 12345 bytes in 12.10s. 1020.25 bytes/s.
+Saved /loracam/000001.jpg (12345 bytes)
+server: 12345 bytes in 0.41s. ...
 ```
 
 Type 0 is a picture and type 1 is audio. With the default `audio = 0` every request is type 0. With `audio = 1` the types alternate after each completed transfer.
 
-The local node prints nothing while it connects to Wi-Fi. If the log stops after boot, check `auth.h` (see [troubleshooting](troubleshooting.md#local-node-hangs-after-boot)).
+Without Wi-Fi the log shows `Wi-Fi not connected yet; continuing, uploads wait for it` at boot and `Wi-Fi not connected, upload skipped` after each picture (see [troubleshooting](troubleshooting.md#wi-fi-not-connected-yet--wi-fi-not-connected-upload-skipped)).
 
 ### What the remote node logs
 
@@ -104,13 +107,18 @@ microphone: 110592 bytes in 5.00s. ...
 
 ### Pictures
 
-`MMDDHHMM.jpg` is a 640×480 JPEG (by default). With re-encoding on it's the remote node's re-encoded copy: grayscale for night shots, colour otherwise (see [configuration.md](configuration.md#image-re-encoding)). Open it with any image viewer.
+Each picture exists in up to two places:
+
+- **On the base station's SD card** (`sdcard = 1`): `/loracam/000001.jpg`, `000002.jpg` … numbered in arrival order and never overwritten. File dates are correct once Wi-Fi has set the clock (UTC). To read them, power the base station off, take the card out and copy the folder on any computer.
+- **On the server** (when Wi-Fi is up): `MMDDHHMM.jpg` in the folder `listen.py` runs in.
+
+Both are the same 640×480 JPEG (by default). With re-encoding on it's the remote node's re-encoded copy: grayscale for night shots, colour otherwise (see [configuration.md](configuration.md#image-re-encoding)). Open it with any image viewer.
 
 ### Audio
 
 Only produced when both nodes are built with `audio = 1` (see [configuration.md](configuration.md#audio-capture-optional)).
 
-`MMDDHHMM.raw` is headerless PCM: **signed 16-bit little-endian, mono, 11025 Hz** (with the defaults in [configuration.md](configuration.md#audio)). The HTTP `Content-Type` header says `audio/L8`, but the data is 16-bit. Convert or play it with:
+`MMDDHHMM.raw` on the server, or `/loracam/NNNNNN.raw` on the base station's SD card, is headerless PCM: **signed 16-bit little-endian, mono, 11025 Hz** (with the defaults in [configuration.md](configuration.md#audio)). The HTTP `Content-Type` header says `audio/L8`, but the data is 16-bit. Convert or play it with:
 
 ```sh
 ffmpeg -f s16le -ar 11025 -ac 1 -i 10181432.raw 10181432.wav

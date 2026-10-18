@@ -58,7 +58,7 @@ The remote node is stateless between requests. It serves any packet index from i
 - **Audio request to a picture-only remote:** a remote node built with `audio = 0` ignores `F9 FD` entirely. Build both nodes with the same `audio` value.
 - **Remote busy:** the remote handles one request at a time and doesn't listen while it captures (up to ~25 s for a picture). The local node waits up to `MAX_RFT_RESPONSE_MS` for the answer.
 - **Short last packet:** if the last packet has only 1–2 payload bytes (total length < 5) and the low byte of its index is `0xF9`, the local node mistakes it for an RFT response and discards it. That only happens when `content_length % 250` is 1 or 2 and `n − 1 ≡ 249 (mod 256)`. It's rare, and it costs the last 1–2 bytes.
-- **Upload:** the HTTP status of the PUT is not checked. If the server is down, that capture is lost.
+- **Upload:** a failed PUT (no Wi-Fi, server down, non-2xx status) is logged but not retried. With `sdcard = 1` the file was already saved to the SD card first, so it isn't lost.
 
 ## Throughput
 

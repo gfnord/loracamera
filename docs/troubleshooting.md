@@ -5,11 +5,12 @@
 Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver, which has a +21 dB LNA.
 
 1. **Remote radio.** Flash `remote`, open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`.
-2. **Local radio and Wi-Fi.** Flash `local` with a valid `auth.h`. The log must show no `Starting LoRa failed!` and reach `I have … free heap`, which means Wi-Fi joined. With `display = 1` the OLED shows the same failure message.
+2. **Local radio, SD card and Wi-Fi.** Flash `local` with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With `display = 1` the OLED shows the same LoRa failure message.
 3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
 4. **Link.** With both boards running, the local log shows `Receiving rft response, N packets` within ~30 s, then packet progress with RSSI.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
 6. **Audio** (only with `audio = 1`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
+7. **SD card.** After the first transfer the local log shows `Saved /loracam/000001.jpg (… bytes)`. Check the file on a computer.
 
 ## Build and flash
 
@@ -61,8 +62,21 @@ On this board the KCT8103L front end must be powered and switched. `radioBegin()
 
 ## Local node
 
-### Local node hangs after boot
-`setup()` waits forever for Wi-Fi without logging anything. Check `WIFI_SSID`/`WIFI_PASS` in `auth.h`, and make sure the network is 2.4 GHz and in range.
+### `Wi-Fi not connected yet` / `Wi-Fi not connected, upload skipped`
+The base station waits `WIFI_CONNECT_TIMEOUT_MS` (20 s) at boot, then runs without Wi-Fi and keeps retrying in the background. Pictures still go to the SD card. Check `WIFI_SSID`/`WIFI_PASS` in `auth.h`, and make sure the network is 2.4 GHz and in range.
+
+### `SD card not found`
+- The card must be **FAT32**. 64 GB+ cards come formatted exFAT, which this firmware can't read: reformat them.
+- Check the wiring against [hardware.md](hardware.md#base-station-wiring): CS GPIO4, SCK GPIO39, MISO GPIO38, MOSI GPIO41, power from 3V3.
+- Breakouts with an AMS1117 regulator need 5 V and won't run from 3V3.
+- Nothing plugged into the GNSS connector: it shares GPIO38/39/41.
+- The firmware retries before every file, so fixing the card doesn't need a reboot.
+
+### `SD card: can't open …` / `wrote N of M bytes`
+The card was removed or failed during a write. The base station remounts before the next file. If it repeats, replace the card.
+
+### `SD card full`
+Copy the files off and delete them, or use a bigger card. New files are still uploaded if Wi-Fi is up.
 
 ### OLED stays black
 - The OLED is only driven when the firmware is built with `display = 1` in `platformio.ini`. The default is `0`, for boards without a display.
@@ -70,7 +84,8 @@ On this board the KCT8103L front end must be powered and switched. `radioBegin()
 - It's normal for the screen to stay blank until the first packet arrives.
 
 ### Uploads never appear on the server
-- The local node doesn't check the HTTP result. Watch the `listen.py` console for `"PUT /image.jpg HTTP/1.1" 201` lines.
+- With `sdcard = 1` every picture is also on the card, so nothing is lost; copy the missed ones from `/loracam`.
+- The local node logs `Upload failed: <status or error>` when the server doesn't answer with 2xx, and `Wi-Fi not connected, upload skipped` without Wi-Fi. Watch the `listen.py` console for `"PUT /image.jpg HTTP/1.1" 201` lines.
 - `SERVER_URL` must use the server's LAN IP and port 8000. Test it with `curl` from another device on the same network.
 - Server inside WSL2: see [usage.md](usage.md#running-the-server-under-wsl2).
 - Check the firewall on the server machine for inbound TCP 8000.

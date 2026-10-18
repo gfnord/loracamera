@@ -65,6 +65,7 @@ Radio settings, TX power, pins and timing have working defaults. Radio settings 
 |---|---|---|
 | `audio` | `0` | [Audio capture](configuration.md#audio-capture-optional) |
 | `display` | `0` (no OLED) | [OLED display](configuration.md#oled-display-optional) |
+| `sdcard` | `1` (SD card on the base station) | [SD card](configuration.md#sd-card-base-station) |
 | `camera_baud`, `camera_compression` | `115200`, `54` | [Camera](configuration.md#camera) |
 | `jpeg_quality`, `night_grayscale`, `night_max_chroma` | `30`, `1`, `12` | [Image re-encoding](configuration.md#image-re-encoding) |
 

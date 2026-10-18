@@ -1,6 +1,6 @@
 # Configuration reference
 
-All settings are compile-time. Change them, rebuild, and reflash. **`audio` in the `[loracamera]` section of `platformio.ini` and the settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.** `display` only affects the local node, and the camera settings only the remote node.
+All settings are compile-time. Change them, rebuild, and reflash. **`audio` in the `[loracamera]` section of `platformio.ini` and the settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.** `display` and `sdcard` only affect the local node, and the camera settings only the remote node.
 
 ## Audio capture (optional)
 
@@ -42,6 +42,30 @@ Then rebuild and reflash the **local** node. The remote node never uses the disp
 | GPIO17, 18, 21 on the local node | free | used by the OLED |
 
 Vext (GPIO40) is switched on either way, because it also powers the `Ve` header pins.
+
+## SD card (base station)
+
+The base station saves every file it receives to a microSD card, **before** trying to upload it. Set in `platformio.ini` (local node only):
+
+```ini
+[loracamera]
+sdcard = 1   ; default; 0 = upload only, SD code not compiled in
+```
+
+| | `sdcard = 0` | `sdcard = 1` (default) |
+|---|---|---|
+| Received files | uploaded only | saved to `/loracam/NNNNNN.jpg` (or `.raw`), then uploaded |
+| Without Wi-Fi | files are lost | files are kept on the card |
+| GPIO4, 38, 39, 41 | free | SD card SPI bus ([wiring](hardware.md#base-station-wiring)) |
+
+How it behaves:
+- **Card format:** FAT32 only. The ESP32 core used here has exFAT disabled, so 64 GB+ (SDXC) cards must be reformatted.
+- **File names:** `000001.jpg`, `000002.jpg` … in `/loracam`. At boot the firmware continues after the highest number already on the card, so reboots never overwrite files.
+- **Timestamps:** once Wi-Fi has been up, the clock is set from NTP (`pool.ntp.org`, UTC), and every file's modification time on the card is correct. If Wi-Fi hasn't been up since boot, files carry an arbitrary date; the numbering still gives the order.
+- **Missing or removed card:** the base station keeps working and logs `SD card not found`. Each new file retries the mount, so a card inserted later is picked up without a reboot.
+- **Full card:** the file isn't saved (`SD card full`), and it's still uploaded if Wi-Fi is up.
+- **Incomplete transfers:** if a packet was skipped after all retries, the shorter, damaged file is saved and uploaded as received, same as before.
+- **Wiring:** the SD pins are set in `src/local/storage.cpp` (`SD_CS`, `SD_SCK`, `SD_MISO`, `SD_MOSI`).
 
 ## Radio link (`lib/HeltecV4R8/HeltecV4R8.h`)
 
@@ -104,12 +128,13 @@ These are calculated with the Semtech airtime formula, not measured.
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw` |
+| `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw`. Non-2xx responses and connection errors are logged as `Upload failed: …`; the file isn't retried (it's on the SD card with `sdcard = 1`) |
 | `WIFI_SSID`, `WIFI_PASS` | from `auth.h` | 2.4 GHz network |
 | `CHECK_EVERY_MS` | `10000` | Pause after a finished transfer before the next request |
 | `MAX_RFT_RESPONSE_MS` | `30000` | How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480 and 38400 baud, per the original code comment; less at 115200) + 1 s power-off + re-encoding (≈ 1 s [estimate]); audio (if enabled) = `AUDIO_SECONDS` |
 | `REQUEST_TIMER` | `200` | Retries for a request, and per data packet. Must fit in a `uint8_t` (≤ 255) |
 | `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255 |
+| `WIFI_CONNECT_TIMEOUT_MS` | `20000` | How long `setup()` waits for Wi-Fi before starting without it. The driver keeps reconnecting in the background, and uploads are skipped (`Wi-Fi not connected, upload skipped`) until it's up |
 
 With the default `audio = 0`, every request is for a **picture**. With `audio = 1`, the first request after boot is for a picture, and the type then alternates between picture and audio after each completed transfer.
 

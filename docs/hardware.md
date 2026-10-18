@@ -2,7 +2,7 @@
 
 ## Bill of materials
 
-Everything in the [wiring diagram](#remote-node-wiring), plus the cables it implies.
+Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base station](#base-station-wiring)), plus the cables they imply.
 
 **Both nodes**
 
@@ -10,6 +10,11 @@ Everything in the [wiring diagram](#remote-node-wiring), plus the cables it impl
 |---|---|---|
 | 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end. 868–928 MHz high-power model. Sold with or without a 0.96" OLED; the firmware works either way ([configuration.md](configuration.md#oled-display-optional)) |
 | 2 | 915 MHz LoRa antenna, IPEX (U.FL) connector | One per board. Check whether your kit includes them. Never transmit without an antenna attached |
+| 2 | LiPo cell, 3.7 V, with protection circuit | One per node. JST **SH 1.25 mm** 2-pin plug to fit the board. ≥ 3000 mAh on the remote node, larger on the base station (see [sizing](#battery-and-solar-sizing)). Check the plug polarity against the board's BAT marking before connecting: LiPo polarity isn't standardised |
+| 2 | Solar panel, 5 V nominal, 2–3 W | One per node. Output must stay within Heltec's 4.7–6 V solar-input range. JST **SH 1.25 mm** 2-pin plug to the board's SOLAR connector |
+| 4 | JST SH 1.25 mm 2-pin pigtails | For the batteries and solar panels if they come with other plugs (JST PH 2.0 mm is common) or bare leads |
+| 2 | Weatherproof enclosure | One per node: board, battery and (remote) boost converter. Not in the diagrams. The camera has its own housing |
+| — | Hook-up wire, female Dupont jumpers or a terminal block, heat-shrink | Camera, boost converter and SD breakout to the 2.54 mm headers |
 | 1–2 | USB-C data cable | Flashing and serial log. A charge-only cable won't enumerate |
 
 **Remote node (field)**
@@ -18,21 +23,18 @@ Everything in the [wiring diagram](#remote-node-wiring), plus the cables it impl
 |---|---|---|
 | 1 | [Adafruit 613: weatherproof TTL serial JPEG camera with IR LEDs (VC0706)](https://www.adafruit.com/product/613) | 5 V supply, 3.3 V serial, built-in night vision (see [below](#camera-adafruit-613)). Comes with a 1 m cable with bare leads |
 | 1 | 5 V boost converter module | ≥ 1 A out, input range covering 3.0–4.2 V, **enable pin that is active-high and accepts 3.3 V logic** (driven by GPIO41). Wiring in [Power](#power) |
-| 1 | LiPo cell, 3.7 V, with protection circuit | JST **SH 1.25 mm** 2-pin plug to fit the board. ≥ 3000 mAh recommended (see [sizing](#battery-and-solar-sizing)). Check the plug polarity against the board's BAT marking before connecting: LiPo polarity isn't standardised |
-| 1 | Solar panel, 5 V nominal, 2–3 W | Output must stay within Heltec's 4.7–6 V solar-input range. JST **SH 1.25 mm** 2-pin plug to the board's SOLAR connector |
-| 2 | JST SH 1.25 mm 2-pin pigtails | For the battery and the solar panel if they come with other plugs (JST PH 2.0 mm is common) or bare leads |
 | 1 | Battery + tap for the boost converter | A Y-split on the battery's + lead, or a soldered tap. The board's headers don't expose the battery voltage |
-| — | Hook-up wire, female Dupont jumpers or a terminal block, heat-shrink | Camera leads and boost converter to the 2.54 mm headers |
 | 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | **Only if built with `audio = 1`** ([configuration.md](configuration.md#audio-capture-optional)) |
-| 1 | Weatherproof enclosure | Not in the diagram, but the board, battery and boost converter need one outdoors. The camera has its own housing |
 
-**Local node (base station) and server**
+**Base station (local node) and server**
 
 | Qty | Part | Notes |
 |---|---|---|
-| 1 | USB-C 5 V supply, ≥ 500 mA | Powers the local node |
+| 1 | microSD breakout, SPI, **3.3 V** | E.g. [Adafruit 4682](https://www.adafruit.com/product/4682) (3 V only) or [Adafruit 254](https://www.adafruit.com/product/254) (3–5 V). Avoid cheap modules with an AMS1117 regulator: they need 5 V, which a battery-powered board doesn't have. Wiring: [Base station wiring](#base-station-wiring) |
+| 1 | microSD card, FAT32 | SDHC up to 32 GB comes FAT32. The firmware can't read exFAT, so reformat 64 GB+ cards (SDXC) as FAT32. 1 GB holds roughly 50,000 re-encoded 20 KB pictures |
 | 1 | 2.4 GHz Wi-Fi antenna | Heltec's case version integrates an FPC 2.4 GHz antenna on the second IPEX connector. A bare board needs an IPEX 2.4 GHz antenna |
-| 1 | Computer on the same LAN | Runs `server/listen.py` and stores the pictures ([usage.md](usage.md#1-run-the-upload-server)) |
+| 1 | USB-C 5 V supply, ≥ 500 mA (optional) | Bench power, or mains power instead of the solar panel |
+| 1 | Computer on the same LAN | Runs `server/listen.py` and receives the uploads ([usage.md](usage.md#1-run-the-upload-server)). Optional: without Wi-Fi the base station keeps collecting to the SD card |
 
 Heltec's V4-R8 datasheet (`WiFi_LoRa_32_V4R8.pdf`) and schematic (`HTIT-WBR8H_V4.3.2.pdf`) are the sources for this page. Heltec's copyright notice doesn't allow redistributing them, so they aren't committed. Get them from Heltec support or the product page.
 
@@ -112,6 +114,25 @@ From Adafruit's product sheet:
 
 The NTSC video output is unused.
 
+## Base station wiring
+
+The base station (local node) saves every received file to a microSD card (`sdcard = 1`, the default; see [configuration.md](configuration.md#sd-card-base-station)). It runs from its own LiPo and solar panel, connected exactly like on the remote node.
+
+![Wiring diagram of the base station: microSD breakout on header J3, LiPo and solar panel on the board's JST connectors, LoRa and Wi-Fi antennas](images/wiring-base.svg)
+
+| SD breakout pin | V4-R8 pin | Define in `src/local/storage.cpp` |
+|---|---|---|
+| GND | GND (J3 pin 1) | |
+| 3V / VCC | 3V3 (J3 pin 2) | |
+| CS | GPIO4 (J3 pin 15) | `SD_CS` |
+| SCK / CLK | GPIO39 (J3 pin 10) | `SD_SCK` |
+| MISO / DO | GPIO38 (J3 pin 11) | `SD_MISO` |
+| MOSI / DI | GPIO41 (J3 pin 8) | `SD_MOSI` |
+
+- The card uses its own SPI bus (the ESP32-S3's second general-purpose SPI controller, `HSPI` in Arduino), so it never shares wires with the LoRa radio.
+- GPIO38, 39 and 41 are also on the board's GNSS connector. Leave that connector empty on the base station.
+- Power the breakout from **3V3**, not from `Ve` or `5V`. `5V` only exists on USB power, and `Ve` is switched by the firmware.
+
 ## Power
 
 | Source | Notes |
@@ -154,3 +175,9 @@ All figures are estimates from the datasheet currents above, not measurements.
 - **The default settings run almost continuously.** The local node asks for the next picture `CHECK_EVERY_MS` (10 s) after the previous transfer ends, so ~1,900 pictures a day, roughly **5–8 Ah per day**. A solar panel on this board can't keep up with that.
 
 For solar operation, raise `CHECK_EVERY_MS` in `src/local/main.cpp`. At one picture every 10 minutes the remote needs about 2.2 Ah per day, which a 2–3 W panel covers on sunny days. A 3000 mAh cell then bridges about a day without sun; use a larger one for longer cloudy spells.
+
+**Base station.** It doesn't sleep either: LoRa receive (~75 mA) plus Wi-Fi. The firmware keeps Wi-Fi connected with the core's default modem-sleep power saving, which adds on average a few tens of mA [estimate]; active transmission draws 120–170 mA. SD writes are brief. That puts the base station around **2.5–3.5 Ah per day** [estimate], at or above the ~2.7 Ah a solar panel can put back through the charger. So:
+
+- use a larger cell (6000 mAh or more) to ride out cloudy days, and expect the battery to run down slowly in poor weather;
+- if Wi-Fi isn't reachable, the driver keeps retrying in the background, which costs power without uploading anything;
+- a USB supply removes the constraint where mains power is available.

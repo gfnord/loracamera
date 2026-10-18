@@ -2,14 +2,37 @@
 
 ## Bill of materials
 
+Everything in the [wiring diagram](#remote-node-wiring), plus the cables it implies.
+
+**Both nodes**
+
 | Qty | Part | Notes |
 |---|---|---|
 | 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end. 868–928 MHz high-power model. Sold with or without a 0.96" OLED; the firmware works either way ([configuration.md](configuration.md#oled-display-optional)) |
-| 2 | 915 MHz antenna (IPEX) | Never transmit without an antenna attached |
-| 1 | [Adafruit 613: weatherproof TTL serial JPEG camera with IR LEDs (VC0706)](https://www.adafruit.com/product/613) | Remote node. 5 V supply, 3.3 V serial, built-in night vision (see [below](#camera-adafruit-613)) |
-| 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | Remote node, **only if built with `audio = 1`** ([configuration.md](configuration.md#audio-capture-optional)) |
-| 1 | Load switch / MOSFET for the camera supply | 5 V, at least 325 mA; driven by GPIO41 (see below) |
-| 1–2 | LiPo cell (JST SH1.25 2-pin) and/or solar panel | Remote node power |
+| 2 | 915 MHz LoRa antenna, IPEX (U.FL) connector | One per board. Check whether your kit includes them. Never transmit without an antenna attached |
+| 1–2 | USB-C data cable | Flashing and serial log. A charge-only cable won't enumerate |
+
+**Remote node (field)**
+
+| Qty | Part | Notes |
+|---|---|---|
+| 1 | [Adafruit 613: weatherproof TTL serial JPEG camera with IR LEDs (VC0706)](https://www.adafruit.com/product/613) | 5 V supply, 3.3 V serial, built-in night vision (see [below](#camera-adafruit-613)). Comes with a 1 m cable with bare leads |
+| 1 | 5 V boost converter module | ≥ 1 A out, input range covering 3.0–4.2 V, **enable pin that is active-high and accepts 3.3 V logic** (driven by GPIO41). Wiring in [Power](#power) |
+| 1 | LiPo cell, 3.7 V, with protection circuit | JST **SH 1.25 mm** 2-pin plug to fit the board. ≥ 3000 mAh recommended (see [sizing](#battery-and-solar-sizing)). Check the plug polarity against the board's BAT marking before connecting: LiPo polarity isn't standardised |
+| 1 | Solar panel, 5 V nominal, 2–3 W | Output must stay within Heltec's 4.7–6 V solar-input range. JST **SH 1.25 mm** 2-pin plug to the board's SOLAR connector |
+| 2 | JST SH 1.25 mm 2-pin pigtails | For the battery and the solar panel if they come with other plugs (JST PH 2.0 mm is common) or bare leads |
+| 1 | Battery + tap for the boost converter | A Y-split on the battery's + lead, or a soldered tap. The board's headers don't expose the battery voltage |
+| — | Hook-up wire, female Dupont jumpers or a terminal block, heat-shrink | Camera leads and boost converter to the 2.54 mm headers |
+| 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | **Only if built with `audio = 1`** ([configuration.md](configuration.md#audio-capture-optional)) |
+| 1 | Weatherproof enclosure | Not in the diagram, but the board, battery and boost converter need one outdoors. The camera has its own housing |
+
+**Local node (base station) and server**
+
+| Qty | Part | Notes |
+|---|---|---|
+| 1 | USB-C 5 V supply, ≥ 500 mA | Powers the local node |
+| 1 | 2.4 GHz Wi-Fi antenna | Heltec's case version integrates an FPC 2.4 GHz antenna on the second IPEX connector. A bare board needs an IPEX 2.4 GHz antenna |
+| 1 | Computer on the same LAN | Runs `server/listen.py` and stores the pictures ([usage.md](usage.md#1-run-the-upload-server)) |
 
 Heltec's V4-R8 datasheet (`WiFi_LoRa_32_V4R8.pdf`) and schematic (`HTIT-WBR8H_V4.3.2.pdf`) are the sources for this page. Heltec's copyright notice doesn't allow redistributing them, so they aren't committed. Get them from Heltec support or the product page.
 
@@ -69,7 +92,7 @@ All peripherals use free header GPIOs. The ESP32-S3 pins are **3.3 V only and no
 | Mic 3V / GND (`audio = 1` only) | 3V3 / GND | |
 | Mic SEL (`audio = 1` only) | leave unconnected | see [troubleshooting](troubleshooting.md#audio-is-silent-or-noise) if audio is silent |
 
-`CAMERA_ONOFF` is a logic signal (HIGH = camera on), not a supply. Use it to drive a load switch or a MOSFET that feeds the camera's 5 V. The firmware switches the camera on before each picture and off afterwards. Cutting the power also returns the camera's serial speed to 38400 baud, which the firmware expects at power-up (it copes if the power isn't actually cut).
+`CAMERA_ONOFF` is a logic signal (HIGH = camera on), not a supply. It drives the enable pin of the 5 V boost converter that feeds the camera (see [Power](#power)). The firmware switches the camera on before each picture and off afterwards. Cutting the power also returns the camera's serial speed to 38400 baud, which the firmware expects at power-up (it copes if the power isn't actually cut).
 
 ### Camera (Adafruit 613)
 
@@ -120,3 +143,14 @@ The camera needs **5 V**, and only while a picture is taken: about 4 s of fixed 
 Because the boost converter is fed from the battery only, fit the LiPo even when testing on USB.
 
 The default TX setting gives about 20 dBm at the antenna (see [configuration.md](configuration.md#tx-power)). The remote node never sleeps: it stays in receive mode waiting for requests.
+
+### Battery and solar sizing
+
+All figures are estimates from the datasheet currents above, not measurements.
+
+- **Charging is capped at about 540 mA.** The board's charger (CN3165) sets its current with R13 = 2.2 kΩ, I = 1188 / R13 per the schematic, and the solar input goes through the same charger. A 5 V panel of about 2.7 W can deliver that, so a bigger panel only helps in weak light. With ~5 h of good sun that's at most ~2.7 Ah per day.
+- **Idle receive alone uses ~1.8 Ah per day** (75 mA around the clock).
+- **Each picture adds ~2–3 mAh:** camera on for ~13 s (more at night, with the IR LEDs), then ~16 s of transmitting a ~20 KB re-encoded image at SF7.
+- **The default settings run almost continuously.** The local node asks for the next picture `CHECK_EVERY_MS` (10 s) after the previous transfer ends, so ~1,900 pictures a day, roughly **5–8 Ah per day**. A solar panel on this board can't keep up with that.
+
+For solar operation, raise `CHECK_EVERY_MS` in `src/local/main.cpp`. At one picture every 10 minutes the remote needs about 2.2 Ah per day, which a 2–3 W panel covers on sunny days. A 3000 mAh cell then bridges about a day without sun; use a larger one for longer cloudy spells.

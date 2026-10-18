@@ -124,5 +124,5 @@ In Audacity use **File → Import → Raw Data** with *Signed 16-bit PCM*, *Litt
 
 - **Range.** The original V2 build reached ~1 km through dense woods at ~20 dBm with SF7/250 kHz. To trade speed for range, raise the spreading factor first (see [configuration.md](configuration.md#range-vs-speed)), then TX power.
 - **Antennas.** Height and line of sight matter more than power. Keep both antennas vertical and away from metal and the battery.
-- **Battery life.** The remote node never sleeps: about 75 mA in receive, and several hundred mA while transmitting or running the camera. Size the battery and solar panel for continuous operation.
+- **Battery life.** The remote node never sleeps: about 75 mA in receive, and several hundred mA while transmitting or running the camera. With the default 10 s between pictures a solar-charged battery can't keep up; see [battery and solar sizing](hardware.md#battery-and-solar-sizing) and raise `CHECK_EVERY_MS` for solar operation.
 - **Interference.** Other 915 MHz LoRa devices using sync word `0x12` (private networks) are received too. Packets that don't match the protocol are ignored. Changing `LORA_SYNC_WORD` on both nodes filters most of them out.

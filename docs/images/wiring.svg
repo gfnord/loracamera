@@ -194,7 +194,7 @@
 <circle cx="330" cy="825" r="4" fill="#e8740c"/>
 <text x="48" y="818" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#e8740c">battery + → boost VIN+ (tap the + lead)</text>
 <rect x="660" y="760" width="240" height="80" rx="8" fill="#fffbe6" stroke="#e8740c" stroke-width="2"/>
-<text x="780" y="790" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f2328">Solar panel 5–6 V</text>
+<text x="780" y="790" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f2328">Solar panel 5 V, 2–3 W</text>
 <text x="780" y="810" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">4.7–6 V, JST SH1.25 2-pin</text>
 <text x="780" y="828" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">charges the LiPo through the board</text>
 <polyline points="760,760 760,644" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>

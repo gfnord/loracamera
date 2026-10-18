@@ -5,7 +5,7 @@
 Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver, which has a +21 dB LNA.
 
 1. **Remote radio.** Flash `remote`, open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`.
-2. **Local display and radio.** Flash `local` with a valid `auth.h`. The OLED must not show `Starting LoRa failed!`, and the log must reach `I have … free heap`, which means Wi-Fi joined.
+2. **Local radio and Wi-Fi.** Flash `local` with a valid `auth.h`. The log must show no `Starting LoRa failed!` and reach `I have … free heap`, which means Wi-Fi joined. With `display = 1` the OLED shows the same failure message.
 3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
 4. **Link.** With both boards running, the local log shows `Receiving rft response, N packets` within ~30 s, then packet progress with RSSI.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
@@ -49,7 +49,7 @@ The full list is in RadioLib's `src/TypeDef.h`.
 
 ### Transfers crawl: many `response timer timeout` or `LoRa receive error: -7`
 `-7` is a CRC error: the packet arrived corrupted. Both messages point to a weak or noisy link:
-- Watch the RSSI on the OLED. The SX1262's sensitivity at SF7/250 kHz is around −120 dBm. Readings within a few dB of that mean the link is marginal.
+- Watch the RSSI in the local node's serial log (`rssi: …` on each progress line), or on the OLED with `display = 1`. The SX1262's sensitivity at SF7/250 kHz is around −120 dBm. Readings within a few dB of that mean the link is marginal.
 - Raise `LORA_SF` (see [configuration.md](configuration.md#range-vs-speed)), and keep the 4 s response-window limit in mind.
 - Improve antenna placement before raising TX power.
 
@@ -65,6 +65,7 @@ On this board the KCT8103L front end must be powered and switched. `radioBegin()
 `setup()` waits forever for Wi-Fi without logging anything. Check `WIFI_SSID`/`WIFI_PASS` in `auth.h`, and make sure the network is 2.4 GHz and in range.
 
 ### OLED stays black
+- The OLED is only driven when the firmware is built with `display = 1` in `platformio.ini`. The default is `0`, for boards without a display.
 - The OLED is powered from Vext (GPIO40, active **LOW**) and reset through GPIO21. Both are handled by `vextOn()` and `oledReset()`.
 - It's normal for the screen to stay blank until the first packet arrives.
 
@@ -77,20 +78,36 @@ On this board the KCT8103L front end must be powered and switched. `radioBegin()
 ## Remote node
 
 ### `Turning on camera; reset with 0` / `Couldn't take pic`
-- Check the camera supply: GPIO41 must actually switch power to the camera.
+- Check the camera supply: it needs **5 V** (up to 325 mA with the IR LEDs on), and GPIO41 must actually switch it. On a LiPo the board has no 5 V rail (see [hardware.md](hardware.md#power)).
 - TX and RX are crossed: camera TX goes to GPIO47 and camera RX to GPIO48.
-- The camera must run at 38400 baud, its factory default.
+- The camera must power up at 38400 baud, its factory default. The firmware never changes the saved speed. If the camera's EEPROM was set to another baud by other software, set it back with that tool.
 - The VC0706 library is timing-sensitive: the serial calls were slowed down on purpose. Leave the `delay()`s in `takePicture()`/`turnOnCamera()` in place.
+
+### `Camera didn't answer at 115200 baud, staying at 38400`
+Pictures still work, just at the slower speed. Check for long or unshielded camera wires, which matter more at 115200. If it happens every time, set `camera_baud = 38400` in `platformio.ini` to skip the switch.
+
+### Pictures are blocky, or still large
+- With re-encoding on (the default), `jpeg_quality` sets the size: lower is smaller and blockier. Compare the `Re-encoded … -> N bytes` lines in the remote log.
+- With `jpeg_quality = 0`, `camera_compression` is the only size control: higher means smaller and blockier. Watch `len of frame is …`.
+- A lower camera resolution (`VC0706_320x240` in `turnOnCamera()`) cuts size the most. See [configuration.md](configuration.md#image-re-encoding).
+
+### `JPEG decode failed` / `JPEG encode failed` / `Sending the camera JPEG unchanged`
+Re-encoding failed, or wouldn't have made the image smaller, so the camera's original JPEG was sent. Nothing is lost. A one-off decode failure usually means a camera read went wrong. `out of PSRAM` means the board's PSRAM isn't working, which is unexpected on a V4-R8 built from this project.
+
+### Night pictures still in colour (or day pictures in gray)
+Night detection compares each picture's mean colourfulness with `night_max_chroma` (default `12`). The remote log prints it on every picture: `Re-encoded 640x480 colour (chroma 15, …)`. Set `night_max_chroma` between the values you see for real night and day shots, then reflash the remote node.
+
+### No pictures at night
+The IR LEDs switch on by themselves when the camera's photocell sees darkness. Lit IR LEDs add 250 mA at 5 V, and a weak 5 V supply or boost converter can brown out the camera exactly then. Check that the supply holds up under 325 mA.
 
 ### `problem reading data from camera` repeats forever
 The camera stopped answering mid-image, and `takePicture()` retries indefinitely. Power-cycle the remote node and check the camera wiring and supply.
 
-### Large images are corrupted
-Two limits from the original code apply:
-- The VC0706 library keeps its read offset in a 16-bit counter (`frameptr`). Images larger than **65,535 bytes** wrap around and come out corrupted.
-- `takePicture()` doesn't check the frame length against `MAX_TRANSFER_BUFFER` (125,000 bytes).
+### Large images are skipped
+- Frames over **256 KB** (`CAMERA_JPEG_MAX`) don't fit the camera buffer: the remote logs `Can't read a … frame` and answers 0 packets.
+- After re-encoding, an image must fit **125,000 bytes** (`MAX_TRANSFER_BUFFER`). Otherwise the camera's JPEG is used if it fits, and if neither fits nothing is sent (`doesn't fit the … transfer buffer`).
 
-If `len of frame is` reports more than 65535, switch to `VC0706_320x240` in `turnOnCamera()`.
+The VC0706 library's old 16-bit read offset, which corrupted images over 64 KB, has been widened to 32 bits.
 
 ### Audio is silent or noise
 Audio exists only in builds with `audio = 1` in `platformio.ini`, on **both** nodes.

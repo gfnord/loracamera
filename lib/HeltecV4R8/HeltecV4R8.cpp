@@ -82,3 +82,5 @@ size_t radioReceive(uint8_t *buf, size_t maxLen) {
 }
 
 int radioLastRssi() { return lastRssi; }
+
+uint32_t radioTimeOnAirMs(size_t len) { return (radio.getTimeOnAir(len) + 999) / 1000; }

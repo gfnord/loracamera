@@ -41,6 +41,10 @@ constexpr int8_t LORA_TX_POWER_DBM = 7;
 // ---- Transfer protocol sizes shared by both nodes ----
 constexpr uint32_t MAX_TRANSFER_BUFFER = 125000;
 constexpr uint8_t LORA_TRANSFER_BUFFER = 250; // payload bytes per data packet (+2 header bytes)
+// The remote sends its "N packets" RFT response this many times, this far apart,
+// so one copy survives a collision.
+constexpr uint8_t RFT_RESPONSE_REPEAT = 5;
+constexpr uint32_t RFT_RESPONSE_GAP_MS = 20;
 
 // Audio capture, set by `audio` in the [loracamera] section of platformio.ini.
 #ifndef LORACAMERA_AUDIO
@@ -72,3 +76,6 @@ size_t radioReceive(uint8_t *buf, size_t maxLen);
 
 // RSSI of the last packet returned by radioReceive().
 int radioLastRssi();
+
+// Airtime of a packet of len bytes with the current radio settings, in ms (rounded up).
+uint32_t radioTimeOnAirMs(size_t len);

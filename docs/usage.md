@@ -43,20 +43,20 @@ By default WSL2 sits behind NAT, so the ESP32 can't reach a server running insid
 
 1. Attach antennas to **both** boards before powering them.
 2. Power the **remote** node: battery, solar, or USB. It initialises the radio and waits for requests.
-3. Power the **local** node within Wi-Fi range. It resets the OLED, starts the radio, joins Wi-Fi, then sends its first request after ~10 s.
+3. Power the **local** node within Wi-Fi range. It starts the radio (after resetting the OLED, with `display = 1`), joins Wi-Fi, then sends its first request after ~10 s.
 
 The order doesn't matter. The local node keeps retrying until the remote node answers.
 
 ### What the local node shows
 
-The **OLED** stays blank until the first transfer. During a transfer it shows:
+Progress goes to the **serial log** (below). Boards built with `display = 1` also draw it on the **OLED**, which stays blank until the first transfer and then shows:
 
 ```
 57 / 193 [29.53%]
  rssi: -87
 ```
 
-That's the packet just received, the total packet count, and the RSSI of that packet in dBm. If the radio fails to start, the OLED shows `Starting LoRa failed!`.
+That's the packet just received, the total packet count, and the RSSI of that packet in dBm. If the radio fails to start, the log (and the OLED) shows `Starting LoRa failed!`.
 
 **Serial log** of a normal picture cycle (`pio device monitor`; the numbers are examples):
 
@@ -80,27 +80,31 @@ The local node prints nothing while it connects to Wi-Fi. If the log stops after
 
 ### What the remote node logs
 
+Example values:
+
 ```
 I have 234567 free heap
 Turning on camera; reset with 1
+Camera serial at 115200 baud
 Taking pic
 len of frame is 48123
-camera: 48123 bytes in 19.80s. ...
+camera: 48123 bytes in 9.80s. ...
 Turning off camera
-RFT received. Content length is 48123; buffer count 250. Packets to send is 193
-Packet 0 was requested. byte_start is 0. content_length 48123
+Re-encoded 640x480 grayscale (chroma 3, quality 30): 48123 -> 12345 bytes in 0.90s
+RFT received. Content length is 12345; buffer count 250. Packets to send is 50
+Packet 0 was requested. byte_start is 0. content_length 12345
 ...
 Recording 5 seconds of audio                     (audio = 1 builds only)
 microphone: 110592 bytes in 5.00s. ...
 ```
 
-`reset with 1` means the camera answered and `reset with 0` means it didn't. The remote node has no display output.
+`reset with 1` means the camera answered and `reset with 0` means it didn't. The `Re-encoded` line shows the size the image was cut to, and whether it went out as grayscale (night) or colour, with the measured chroma (see [configuration.md](configuration.md#image-re-encoding)). The remote node has no display output.
 
 ## 3. Use the output files
 
 ### Pictures
 
-`MMDDHHMM.jpg` is a JPEG from the camera (640×480 by default). Open it with any image viewer.
+`MMDDHHMM.jpg` is a 640×480 JPEG (by default). With re-encoding on it's the remote node's re-encoded copy: grayscale for night shots, colour otherwise (see [configuration.md](configuration.md#image-re-encoding)). Open it with any image viewer.
 
 ### Audio
 

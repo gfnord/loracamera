@@ -107,7 +107,7 @@ private:
   uint8_t serialNum;
   uint8_t camerabuff[CAMERABUFFSIZ + 1];
   uint8_t bufferLen;
-  uint16_t frameptr;
+  uint32_t frameptr; // frame buffer read offset; 32-bit so images over 64 KB read correctly
 
 #if defined(__AVR__) || defined(ESP8266)
   SoftwareSerial *swSerial;

@@ -26,7 +26,7 @@ The first build downloads the toolchain and libraries automatically:
 |---|---|
 | `platformio/espressif32` platform | ^7.1.3 (Arduino-ESP32 core 2.0.17, ESP-IDF 4.4) |
 | `jgromes/RadioLib` | ^7.8.1 |
-| `thingpulse/ESP8266 and ESP32 OLED driver for SSD1306 displays` | ^4.6.2 (local node only) |
+| `thingpulse/ESP8266 and ESP32 OLED driver for SSD1306 displays` | ^4.6.2 (local node; only linked with `display = 1`) |
 
 If you'd rather use an IDE, the PlatformIO extension for VS Code opens this folder directly.
 
@@ -59,7 +59,16 @@ The firmware sends pictures only. To also capture microphone audio, set `audio =
 
 ### Everything else
 
-Radio settings, TX power, pins and timing have working defaults. They're described in [configuration.md](configuration.md). Radio settings live in one shared header, so both nodes always match.
+Radio settings, TX power, pins and timing have working defaults. Radio settings live in one shared header, so both nodes always match. The `[loracamera]` section of `platformio.ini` holds the project options:
+
+| Option | Default | See |
+|---|---|---|
+| `audio` | `0` | [Audio capture](configuration.md#audio-capture-optional) |
+| `display` | `0` (no OLED) | [OLED display](configuration.md#oled-display-optional) |
+| `camera_baud`, `camera_compression` | `115200`, `54` | [Camera](configuration.md#camera) |
+| `jpeg_quality`, `night_grayscale`, `night_max_chroma` | `30`, `1`, `12` | [Image re-encoding](configuration.md#image-re-encoding) |
+
+Everything else is described in [configuration.md](configuration.md).
 
 ## 3. Build
 

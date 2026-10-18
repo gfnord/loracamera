@@ -24,12 +24,13 @@ sequenceDiagram
     participant S as listen.py
     Note over L: every CHECK_EVERY_MS (10 s)
     L->>R: RFT F9 FC (picture) / F9 FD (audio, if enabled)
-    Note over R: capture into transfer_buffer<br/>(picture ≈ 25 s, audio 5 s)
+    Note over R: capture, power the camera off,<br/>re-encode into transfer_buffer<br/>(picture ≈ 25 s, audio 5 s)
     R->>L: F9 C2 n (sent 5 times, 20 ms apart)
+    Note over L: wait out the repeats (~180 ms at SF7)
     loop i = 0 .. n-1
         L->>R: F9 FE i
-        R->>L: i + payload[i*250 ..]
-        Note over L: append to transfer_buffer,<br/>OLED shows i / n and RSSI
+        R->>L: i + payload[i*250 ..] (after a 5 ms turnaround guard)
+        Note over L: append to transfer_buffer,<br/>log i / n and RSSI (and on the OLED with display = 1)
     end
     L->>S: HTTP PUT /image.jpg or /audio.raw
     Note over L: audio = 1: switch picture ↔ audio
@@ -40,16 +41,16 @@ sequenceDiagram
 | Phase | Wait | Retries | Worst case |
 |---|---|---|---|
 | RFT → RFT response | `MAX_RFT_RESPONSE_MS` = 30 s | `REQUEST_TIMER` = 200 | ~100 min, then `Request timer timed out`. The next RFT goes out right away (the 10 s interval is counted from the start of the previous attempt) |
-| Packet request → data packet | `RESPONSE_TIMER` × ~20 ms ≈ 4 s | `REQUEST_TIMER` = 200, with 100 ms between attempts | ~14 min per packet. The packet is then **skipped**, and the uploaded file is shorter and corrupted |
+| Packet request → data packet | `RESPONSE_TIMER` × ~20 ms ≈ 4 s | `REQUEST_TIMER` = 200, resent right after each timeout | ~14 min per packet. The packet is then **skipped**, and the uploaded file is shorter and corrupted |
 
 Filtering on the local node while waiting for data:
 
 - 4-byte frames starting with `F9`, i.e. the repeated RFT responses, are discarded as "magic packet".
 - Frames whose index doesn't match the requested one are discarded as "Mismatched packet". The same request is resent on the next attempt.
-- Frames shorter than 2 bytes, or longer than 252, are discarded as "Malformed packet".
+- Frames shorter than 2 bytes or longer than 252, and frames that would overflow the 125 KB receive buffer, are discarded as "Malformed packet".
 - Frames with a bad CRC are dropped by the radio layer (`LoRa receive error: -7`).
 
-The remote node is stateless between requests. It serves any packet index from its last capture, so a lost packet only costs a re-request.
+The remote node is stateless between requests. It serves any packet index from its last capture, so a lost packet only costs a re-request. Requests for an index past the end of the capture are ignored.
 
 ## Edge cases
 
@@ -65,11 +66,13 @@ One data packet takes:
 
 | Step | Time at SF7 / 250 kHz |
 |---|---|
-| Local delay before the request | 100 ms |
 | Request airtime (4 bytes) | 15 ms |
-| Local delay after transmit + remote poll | ~20–40 ms |
-| Remote delay before the reply | 100 ms |
+| Remote poll interval (`delay(20)` in `loop()`), average | ~10 ms |
+| Remote turnaround guard | 5 ms |
 | Data airtime (252 bytes) | 197 ms |
-| **Total** | **≈ 0.45 s → ≈ 550 B/s** |
+| Local poll interval, average | ~10 ms |
+| **Total** | **≈ 0.24 s → ≈ 1 KB/s** |
 
-That puts a 48 KB JPEG at about 1.4 min and 5 s of audio (≈ 110 KB) at about 3.3 min. These are calculated estimates, not measurements. The two fixed 100 ms delays are about 45% of the cycle at SF7. Shortening them (`delay(100)` in `handle_packets()` on the local node and before `radioSend()` in the remote's `loop()`) would speed transfers up, but only the original values have been tested over ~1 km.
+That puts a 48 KB camera JPEG at about 46 s, a 20 KB re-encoded one at about 19 s, and 5 s of audio (≈ 110 KB) at about 1.8 min. These are calculated estimates, not measurements. The data packet's airtime is now about 83% of the cycle. Further speed has to come from fewer bytes (re-encoding, resolution) or radio settings (bandwidth, SF).
+
+Earlier versions waited a fixed 100 ms before every request and again before every reply (~0.45 s per packet). Those delays were inherited from the original Heltec V2 code and have been removed. `radioSend()` puts the SX1262 back into receive mode as soon as each transmission ends. The remote's 5 ms guard covers that turnaround, and the one-time wait after the RFT response keeps the first request from colliding with the remote's repeated replies. The shorter timing hasn't been tested on hardware yet.

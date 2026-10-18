@@ -536,13 +536,15 @@ uint8_t Adafruit_VC0706::available(void) { return bufferLen; }
 */
 /**************************************************************************/
 uint8_t *Adafruit_VC0706::readPicture(uint8_t n) {
+  // READ_FBUF: data length, frame type, control mode, 32-bit start address,
+  // 32-bit length, delay.
   uint8_t args[] = {0x0C,
                     0x0,
                     0x0A,
-                    0,
-                    0,
-                    frameptr >> 8,
-                    frameptr & 0xFF,
+                    (uint8_t)(frameptr >> 24),
+                    (uint8_t)(frameptr >> 16),
+                    (uint8_t)(frameptr >> 8),
+                    (uint8_t)(frameptr & 0xFF),
                     0,
                     0,
                     0,

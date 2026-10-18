@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include <HeltecV4R8.h>
+#ifndef LORACAMERA_DISPLAY
+#define LORACAMERA_DISPLAY 0
+#endif
+#if LORACAMERA_DISPLAY
 #include <SSD1306Wire.h>
+#endif
 #include <WiFi.h>
 #include <HTTPClient.h>
 
@@ -24,7 +29,9 @@ unsigned int counter = 0;
 long lastCheckTime = 0;
 uint8_t content_type = PICTURE;
 
+#if LORACAMERA_DISPLAY
 SSD1306Wire display(0x3c, PIN_OLED_SDA, PIN_OLED_SCL, GEOMETRY_128_64);
+#endif
 
 // TODO -- bank this so that we can have more room
 uint8_t transfer_buffer[MAX_TRANSFER_BUFFER];
@@ -35,16 +42,20 @@ uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet num
 void setup() { 
 	Serial.begin(115200);
 	vextOn();
+#if LORACAMERA_DISPLAY
 	oledReset();
 	display.init();
 	display.flipScreenVertically();  
 	display.setFont(ArialMT_Plain_10);
+#endif
 
 	if(!radioBegin()) {
 		Serial.printf("Starting LoRa failed!\n");
+#if LORACAMERA_DISPLAY
 		display.clear();
 		display.drawString(0, 0, "Starting LoRa failed!");
 		display.display();
+#endif
 		while(1) delay(1000);
 	}
 
@@ -57,8 +68,10 @@ void setup() {
 
 	Serial.printf("I have %d free heap\n", ESP.getFreeHeap());
 
+#if LORACAMERA_DISPLAY
 	display.clear();
 	display.display();
+#endif
 }
 
 // Debug time taken to do things 
@@ -131,30 +144,34 @@ uint16_t request_transmission() {
 }
 
 void update_status(uint16_t packet_number, uint16_t packets, int rssi) {
-	char message[255];
-	sprintf(message, "%d / %d [%2.2f%%]", 
+	char progress[64];
+	char rssi_line[32];
+	sprintf(progress, "%d / %d [%2.2f%%]", 
 		packet_number, packets, ((float)packet_number/packets)*100.0f);
+	sprintf(rssi_line, " rssi: %d\n", rssi);
+	Serial.print(progress);
+	Serial.print(rssi_line);
 
+#if LORACAMERA_DISPLAY
 	display.clear();
 	display.setFont(ArialMT_Plain_10);
-	display.drawString(0, 0, message);
-	Serial.print(message);
-	sprintf(message, " rssi: %d\n", rssi);
-	display.drawString(0, 15, message);
+	display.drawString(0, 0, progress);
+	display.drawString(0, 15, rssi_line);
 	display.display();
-	Serial.print(message);
-
+#endif
 }
 
 void handle_packets(uint16_t packets) {
 	uint32_t read_pointer = 0;
 	long time = millis();
 	Serial.printf("Got back %d packets from the rft\n", packets);
+	// The remote repeats its RFT response; wait until it's done before the first request,
+	// or that request is sent while the remote is still transmitting and gets lost.
+	delay(RFT_RESPONSE_REPEAT * (radioTimeOnAirMs(4) + RFT_RESPONSE_GAP_MS));
 	for(uint16_t i=0;i<packets;i++) {
 		uint8_t request_timer = REQUEST_TIMER;
 		uint8_t ok = 0;
 		while(request_timer-- > 0 && !ok) {
-			delay(100); // delay 100ms between packet requests
 			request_packet(i);
 			uint8_t response_timer = RESPONSE_TIMER;
 			while(response_timer-- > 0 && !ok) {
@@ -166,7 +183,8 @@ void handle_packets(uint16_t packets) {
 					if(a == 0xF9 && packetSize < 5) {
 						Serial.printf("got magic packet, discarding\n");
 						delay(20);
-					} else if(packetSize < 2 || packetSize > sizeof(lora_buffer)) {
+					} else if(packetSize < 2 || packetSize > sizeof(lora_buffer)
+							|| read_pointer + (packetSize - 2) > MAX_TRANSFER_BUFFER) {
 						Serial.printf("Malformed packet (%d bytes), discarding\n", packetSize);
 					} else {
 						if(packet_number == i) {
@@ -180,10 +198,12 @@ void handle_packets(uint16_t packets) {
 						}
 					}
 				}
+				if(!ok) delay(20); // poll interval while waiting for the packet
+			}
+			if(!ok) {
+				Serial.printf("response timer timeout\n");
 				delay(20);
 			}
-			if(!ok) Serial.printf("response timer timeout\n");
-			delay(20);
 		}
 		if(!ok) Serial.printf("request timer timeout\n");
 	}

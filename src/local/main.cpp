@@ -27,16 +27,20 @@ const char * password = WIFI_PASS ;
 #define RESPONSE_TIMER 200
 // How long setup() waits for Wi-Fi before starting without it (it keeps reconnecting).
 #define WIFI_CONNECT_TIMEOUT_MS 20000
+#if !LORACAMERA_MOTION
 #define CHECK_EVERY_MS 10000
 // The max the remote device will take to acquire image / audio
 #define MAX_RFT_RESPONSE_MS 30000
+#endif
 
 unsigned int counter = 0;
 
 #define AUDIO 1
 #define PICTURE 0
 
+#if !LORACAMERA_MOTION
 long lastCheckTime = 0;
+#endif
 uint8_t content_type = PICTURE;
 
 #if LORACAMERA_DISPLAY
@@ -147,6 +151,7 @@ void request_packet(uint16_t packet_number) {
 
 // say, how many packets you got for me
 // type == 0 for image, 1 for audio
+#if !LORACAMERA_MOTION
 uint16_t request_transmission() {
 	uint8_t request_timer = REQUEST_TIMER;
 	while(request_timer-- > 0) {
@@ -173,6 +178,7 @@ uint16_t request_transmission() {
 	Serial.printf("Request timer timed out\n");
 	return 0;
 }
+#endif
 
 void update_status(uint16_t packet_number, uint16_t packets, int rssi) {
 	char progress[64];
@@ -202,7 +208,13 @@ void handle_packets(uint16_t packets) {
 	for(uint16_t i=0;i<packets;i++) {
 		uint8_t request_timer = REQUEST_TIMER;
 		uint8_t ok = 0;
+#if LORACAMERA_MOTION
+		uint32_t packet_start = millis();
+#endif
 		while(request_timer-- > 0 && !ok) {
+#if LORACAMERA_MOTION
+			if(millis() - packet_start > MOTION_PACKET_GIVE_UP_MS) break;
+#endif
 			request_packet(i);
 			uint8_t response_timer = RESPONSE_TIMER;
 			while(response_timer-- > 0 && !ok) {
@@ -236,8 +248,24 @@ void handle_packets(uint16_t packets) {
 				delay(20);
 			}
 		}
-		if(!ok) Serial.printf("request timer timeout\n");
+		if(!ok) {
+			Serial.printf("request timer timeout\n");
+#if LORACAMERA_MOTION
+			// The remote is probably back asleep: the rest won't come either.
+			Serial.printf("Remote stopped answering; abandoning the transfer at packet %d\n", i);
+			break;
+#endif
+		}
 	}
+#if LORACAMERA_MOTION
+	// "Done" (F9 FA): the remote can go back to sleep before the SD write and upload.
+	for(uint8_t n=0;n<MOTION_DONE_REPEAT;n++) {
+		lora_buffer[0] = 0xF9;
+		lora_buffer[1] = 0xFA;
+		radioSend(lora_buffer, 2);
+		delay(RFT_RESPONSE_GAP_MS);
+	}
+#endif
 	Serial.printf("Loaded all packets, total %d\n", read_pointer);
 	print_time("lora", read_pointer, time);
 	if(read_pointer == 0) return;
@@ -249,7 +277,15 @@ void handle_packets(uint16_t packets) {
 
 
 void loop() {
-	
+#if LORACAMERA_MOTION
+	// The remote pushes a picture when its PIR triggers: wait for its announcement.
+	size_t packetSize = radioReceive(lora_buffer, sizeof(lora_buffer));
+	if(packetSize == 4 && lora_buffer[0] == 0xF9 && lora_buffer[1] == 0xC2) {
+		uint16_t packets = u(lora_buffer[2], lora_buffer[3]);
+		Serial.printf("Motion picture announced, %d packets\n", packets);
+		if(packets) handle_packets(packets);
+	}
+#else
 	uint16_t packets = 0;
 	if(millis() - lastCheckTime > CHECK_EVERY_MS) {
 		lastCheckTime = millis();
@@ -263,8 +299,6 @@ void loop() {
 		if(content_type == AUDIO) { content_type = PICTURE; } else { content_type = AUDIO; } // flip type
 #endif
 	}
+#endif
 	delay(10);
-	
-
-
 }

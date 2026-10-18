@@ -51,6 +51,27 @@ constexpr uint32_t RFT_RESPONSE_GAP_MS = 20;
 #define LORACAMERA_AUDIO 0
 #endif
 
+// PIR-triggered pictures, set by `motion` in the [loracamera] section of platformio.ini.
+#ifndef LORACAMERA_MOTION
+#define LORACAMERA_MOTION 0
+#endif
+static_assert(LORACAMERA_MOTION == 0 || LORACAMERA_MOTION == 1, "motion must be 0 or 1");
+static_assert(!(LORACAMERA_MOTION && LORACAMERA_AUDIO), "motion = 1 needs audio = 0");
+
+// ---- Motion mode (motion = 1): the remote wakes on the PIR and pushes the picture ----
+// The remote announces a capture (F9 C2 n) every MOTION_ANNOUNCE_GAP_MS until the first
+// packet request arrives, at most MOTION_ANNOUNCE_TRIES times, then goes back to sleep.
+constexpr uint32_t MOTION_ANNOUNCE_GAP_MS = 5000;
+constexpr uint8_t MOTION_ANNOUNCE_TRIES = 6;
+// The local node abandons a transfer when one packet hasn't arrived after this long...
+constexpr uint32_t MOTION_PACKET_GIVE_UP_MS = 20000;
+// ...and the remote sleeps after this long without a request, or as soon as it gets F9 FA.
+constexpr uint32_t MOTION_SERVE_IDLE_MS = 30000;
+static_assert(MOTION_SERVE_IDLE_MS > MOTION_PACKET_GIVE_UP_MS,
+	"the remote must outlast the local node's retries");
+// The local node sends its "transfer done" packet (F9 FA) this many times, RFT_RESPONSE_GAP_MS apart.
+constexpr uint8_t MOTION_DONE_REPEAT = 3;
+
 // unsigned int packing functions
 inline uint8_t u0(uint16_t in) { return in & 0xFF; }
 inline uint8_t u1(uint16_t in) { return in >> 8; }
@@ -59,12 +80,19 @@ inline uint16_t u(uint8_t a, uint8_t b) { return (uint16_t)(b << 8) | a; }
 // Switch Vext (OLED and Ve header supply) on.
 void vextOn();
 
+// Switch Vext off.
+void vextOff();
+
 // Pulse the OLED reset line; call with Vext on, before display init.
 void oledReset();
 
 // Power the front end, start the SX1262 and enter continuous receive.
 // Returns false if the radio does not respond.
 bool radioBegin();
+
+// Put the SX1262 into sleep, power the front end down, and hold those pins through
+// deep sleep. radioBegin() releases them again.
+void radioSleep();
 
 // Transmit one packet (blocking), then return to receive mode.
 bool radioSend(const uint8_t *data, size_t len);

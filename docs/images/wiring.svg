@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1020" width="1300" height="1020">
-<rect width="1300" height="1020" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1030" width="1300" height="1030">
+<rect width="1300" height="1030" fill="#ffffff"/>
 <text x="30" y="40" font-family="Helvetica, Arial, sans-serif" font-size="22" text-anchor="start" font-weight="bold" fill="#1f2328">loracamera — wiring (Heltec WiFi LoRa 32 V4-R8)</text>
 <text x="30" y="64" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="start" font-weight="normal" fill="#57606a">Remote node (field). The local node (base station) has its own diagram: wiring-base.svg. Schematic, not to scale.</text>
 <rect x="470" y="170" width="360" height="480" rx="14" fill="#e9f5ee" stroke="#0b5d3b" stroke-width="3"/>
@@ -61,10 +61,10 @@
 <rect x="478" y="595" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
 <text x="484" y="608" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">18  19</text>
 <circle cx="470" cy="604" r="3" fill="#57606a"/>
-<rect x="722" y="221" width="100" height="18" rx="3" fill="#f3ecff" stroke="#8c959f" stroke-width="1"/>
+<rect x="722" y="221" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
 <text x="728" y="234" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 1  GND</text>
 <circle cx="830" cy="230" r="3" fill="#57606a"/>
-<rect x="722" y="243" width="100" height="18" rx="3" fill="#f3ecff" stroke="#8c959f" stroke-width="1"/>
+<rect x="722" y="243" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
 <text x="728" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328"> 2  3V3</text>
 <circle cx="830" cy="252" r="3" fill="#57606a"/>
 <rect x="722" y="265" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
@@ -109,7 +109,7 @@
 <rect x="722" y="551" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
 <text x="728" y="564" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">16  5</text>
 <circle cx="830" cy="560" r="3" fill="#57606a"/>
-<rect x="722" y="573" width="100" height="18" rx="3" fill="#f3ecff" stroke="#8c959f" stroke-width="1"/>
+<rect x="722" y="573" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f" stroke-width="1"/>
 <text x="728" y="586" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">17  6</text>
 <circle cx="830" cy="582" r="3" fill="#57606a"/>
 <rect x="722" y="595" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1"/>
@@ -159,17 +159,27 @@
 <path d="M830,384 L850,384 L850,260 A8 8 0 0 1 850,244 L850,238 A8 8 0 0 1 850,222 L850,110 L290,110 L290,160" fill="none" stroke="#1a7f37" stroke-width="3" stroke-linejoin="round"/>
 <circle cx="830" cy="384" r="4" fill="#1a7f37"/>
 <text x="340" y="104" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1a7f37">GPIO41 (J3 pin 8) → EN: camera power on/off</text>
-<rect x="1000" y="205" width="230" height="400" rx="8" fill="#faf7ff" stroke="#8250df" stroke-width="2" stroke-dasharray="8 5"/>
-<text x="1115" y="300" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#1f2328">I2S MEMS microphone</text>
-<text x="1115" y="318" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">Adafruit SPH0645</text>
-<text x="1115" y="340" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="bold" fill="#8250df">optional: only with audio = 1</text>
-<text x="1115" y="440" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a" font-style="italic">SEL: leave open</text>
-<polyline points="830,230 1000,230" fill="none" stroke="#1f2328" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
+<rect x="1000" y="205" width="230" height="190" rx="8" fill="#effafa" stroke="#1b7c83" stroke-width="2"/>
+<text x="1115" y="290" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#1f2328">PIR motion sensor</text>
+<text x="1115" y="308" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">AM312 or similar, 3.3 V output</text>
+<text x="1115" y="330" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="bold" fill="#1b7c83">default: motion = 1</text>
+<text x="1115" y="350" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a" font-style="italic">wakes the board from deep sleep</text>
+<rect x="1000" y="420" width="230" height="185" rx="8" fill="#faf7ff" stroke="#8250df" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1115" y="446" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#1f2328">I2S MEMS microphone</text>
+<text x="1115" y="463" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">Adafruit SPH0645</text>
+<text x="1115" y="481" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="bold" fill="#8250df">only with audio = 1, motion = 0</text>
+<text x="1115" y="499" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">GND / 3V: J3 pins 1 / 2, like the PIR</text>
+<text x="1220" y="564" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end" font-weight="normal" fill="#57606a" font-style="italic">SEL: leave open</text>
+<polyline points="830,230 1000,230" fill="none" stroke="#1f2328" stroke-width="3" stroke-linejoin="round"/>
 <text x="1010" y="234" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">GND</text>
 <circle cx="830" cy="230" r="4" fill="#1f2328"/>
-<polyline points="830,252 1000,252" fill="none" stroke="#8250df" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
-<text x="1010" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">3V</text>
-<circle cx="830" cy="252" r="4" fill="#8250df"/>
+<polyline points="830,252 1000,252" fill="none" stroke="#1b7c83" stroke-width="3" stroke-linejoin="round"/>
+<text x="1010" y="256" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">VCC</text>
+<circle cx="830" cy="252" r="4" fill="#1b7c83"/>
+<path d="M1000,372 L860,372 L860,508 A8 8 0 0 1 860,524 L860,530 A8 8 0 0 1 860,546 L860,582 L830,582" fill="none" stroke="#1b7c83" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="860" cy="582" r="3" fill="#1b7c83"/>
+<text x="1010" y="376" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">OUT</text>
+<text x="868" y="366" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1b7c83">GPIO6 (J3 pin 17) ← OUT</text>
 <polyline points="830,516 1000,516" fill="none" stroke="#8250df" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="7 4"/>
 <text x="1010" y="520" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="bold" fill="#1f2328">LRCL</text>
 <circle cx="830" cy="516" r="4" fill="#8250df"/>
@@ -183,7 +193,7 @@
 <text x="880" y="553" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#8250df">GPIO4 → BCLK</text>
 <text x="880" y="597" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#8250df">GPIO6 ← DOUT</text>
 <text x="905" y="225" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">GND</text>
-<text x="905" y="267" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#8250df">3V3</text>
+<text x="905" y="267" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1b7c83">3V3 (always on)</text>
 <rect x="330" y="760" width="240" height="80" rx="8" fill="#fff8f0" stroke="#e8740c" stroke-width="2"/>
 <text x="450" y="790" font-family="Helvetica, Arial, sans-serif" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f2328">LiPo cell 3.7 V (protected)</text>
 <text x="450" y="810" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" font-weight="normal" fill="#57606a">3.3–4.2 V, JST SH1.25 2-pin</text>
@@ -229,10 +239,13 @@
 <text x="754.1999999999999" y="890" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">microphone (optional)</text>
 <polyline points="909.4999999999999,886 937.4999999999999,886" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
 <text x="943.4999999999999" y="890" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">JST cable</text>
+<polyline points="1030,886 1058,886" fill="none" stroke="#1b7c83" stroke-width="3" stroke-linejoin="round"/>
+<text x="1064" y="890" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">PIR sensor</text>
 <circle cx="1200" cy="886" r="3" fill="#57606a"/>
 <text x="1208" y="890" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="start" font-weight="normal" fill="#1f2328">header pin</text>
 <text x="30" y="920" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• Header pin numbers follow the V4-R8 datasheet (J2 and J3, pin 1 = GND); highlighted pins are used. ESP32-S3 pins are 3.3 V only.</text>
 <text x="30" y="940" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• Camera cable colours are Adafruit&#x27;s for the weatherproof 613: red +5 V, black GND, white TX (out of camera), green RX (into camera).</text>
 <text x="30" y="960" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• Boost GND goes to board GND (J2 pin 1), not to the battery − lead: the board switches battery − through a protection MOSFET.</text>
 <text x="30" y="980" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• The boost converter is fed from the battery only, so fit the LiPo even on the bench. Never power a board without its LoRa antenna.</text>
+<text x="30" y="1000" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">• Fit the PIR (motion = 1, default) or the microphone (audio = 1, motion = 0), not both: they share GPIO6. Power the PIR from 3V3, not Ve: Ve is off while the board sleeps.</text>
 </svg>

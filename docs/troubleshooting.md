@@ -4,12 +4,12 @@
 
 Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver, which has a +21 dB LNA.
 
-1. **Remote radio.** Flash `remote`, open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`.
+1. **Remote radio.** Flash `remote`, open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` and its USB port disappears; that's expected.
 2. **Local radio, SD card and Wi-Fi.** Flash `local` with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With `display = 1` the OLED shows the same LoRa failure message.
 3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
-4. **Link.** With both boards running, the local log shows `Receiving rft response, N packets` within ~30 s, then packet progress with RSSI.
+4. **Link.** With `motion = 1`, wave a hand in front of the PIR: within ~30 s the local log shows `Motion picture announced, N packets`, then packet progress with RSSI. With `motion = 0` it shows `Receiving rft response, N packets` within ~30 s of booting.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
-6. **Audio** (only with `audio = 1`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
+6. **Audio** (only with `audio = 1`, `motion = 0`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
 7. **SD card.** After the first transfer the local log shows `Saved /loracam/000001.jpg (… bytes)`. Check the file on a computer.
 
 ## Build and flash
@@ -18,7 +18,7 @@ Go through these on the bench, with the boards a few metres apart. At very close
 Create `src/local/auth.h` (see [getting-started.md](getting-started.md#wi-fi-credentials-required)).
 
 ### Upload fails with `Failed to connect to ESP32-S3` or `No serial data received`
-- Enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing.
+- Enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing. A remote node built with `motion = 1` is in deep sleep with its USB port gone almost all the time, so it always needs this (or a PIR trigger at the right moment).
 - Under WSL2, the device re-enumerates when it enters the bootloader. Re-run `usbipd attach --wsl --busid <BUSID>`, or use `--auto-attach`.
 - With two boards connected, pass `--upload-port /dev/ttyACMx`.
 
@@ -26,7 +26,7 @@ Create `src/local/auth.h` (see [getting-started.md](getting-started.md#wi-fi-cre
 Add yourself to `dialout`, or install the PlatformIO udev rules (see [getting-started.md](getting-started.md#linux-permissions)).
 
 ### Serial monitor shows nothing
-The board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor.
+The board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor. A remote node with `motion = 1` only has a USB port while it's awake (power-on, then each PIR trigger); `pio device monitor` reconnects when it comes back, and under WSL2 `usbipd attach --auto-attach` re-attaches it.
 
 ## Radio
 
@@ -47,6 +47,20 @@ The full list is in RadioLib's `src/TypeDef.h`.
 - If the request log says `type 1`, the local node was built with `audio = 1`. A remote node built with `audio = 0` ignores audio requests. Use the same `audio` value in `platformio.ini` for both boards.
 - A picture can take ~25 s to capture. The local node waits `MAX_RFT_RESPONSE_MS` (30 s). If you raised the resolution or slowed the camera, raise that limit too.
 - Check the antennas on both boards.
+
+### Motion mode: no pictures arrive
+- Both nodes must be built with the same `motion` value. A local node built with `motion = 0` sends requests that a sleeping remote never hears, and a local node built with `motion = 1` never asks a polling remote.
+- Does the remote wake? Watch its monitor (it reconnects on each wake-up) or its current draw while waving at the PIR. No wake: check the PIR's 3V3 and GND (`3V3`, not `Ve`, which is off during sleep), and that OUT goes to GPIO6 and reads ~3.3 V while triggered. Some PIRs need up to a minute after power-up before they trigger.
+- The remote wakes but logs `The local node never answered; picture dropped`: the local node wasn't listening for 30 s, or the link is down. See the radio checks above.
+- PIR sensors don't see through glass or clear plastic. Mount the lens outside the enclosure.
+
+### Motion mode: pictures all the time
+- Something keeps the PIR output HIGH: moving branches, sun-warmed or wind-blown surfaces, a road, an animal sitting in view. The remote wakes again straight after each transfer while the output stays HIGH. Re-aim or mask the PIR lens, or shorten its range.
+- With nothing connected to GPIO6 the internal pull-down keeps the board asleep. If it wakes with no PIR fitted, look for a wiring fault pulling GPIO6 up.
+- A picture or two right after power-up is the PIR settling.
+
+### `Remote stopped answering; abandoning the transfer at packet N`
+With `motion = 1` the local node gives up after 20 s without the requested packet, saves what it has, and sends "done". The link failed mid-transfer: see "Transfers crawl" below.
 
 ### Transfers crawl: many `response timer timeout` or `LoRa receive error: -7`
 `-7` is a CRC error: the packet arrived corrupted. Both messages point to a weak or noisy link:

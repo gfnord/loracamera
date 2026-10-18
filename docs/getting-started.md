@@ -4,8 +4,8 @@ The project is a [PlatformIO](https://platformio.org/) project using the Arduino
 
 | Environment | Source | Board role |
 |---|---|---|
-| `local` | `src/local/` | Near Wi-Fi; requests data and uploads it |
-| `remote` | `src/remote/` | In the field; camera (+ microphone if audio is enabled) |
+| `local` | `src/local/` | Near Wi-Fi; receives the pictures (or requests them, with `motion = 0`) and uploads them |
+| `remote` | `src/remote/` | In the field; PIR-triggered camera (+ microphone if audio is enabled, with `motion = 0`) |
 
 Both are built for the same hardware (Heltec V4-R8) from the shared library `lib/HeltecV4R8`.
 
@@ -53,9 +53,13 @@ Edit `SERVER_URL` in `src/local/main.cpp` and set it to the machine that runs `s
 
 The port is fixed at 8000 by `listen.py`. If the server runs inside WSL2, see [usage.md](usage.md#running-the-server-under-wsl2).
 
+### Motion detection (on by default)
+
+The remote node sleeps and takes a picture only when a PIR sensor on GPIO6 sees movement. Wire the PIR as in [hardware.md](hardware.md#motion-sensor-pir). Without a PIR, set `motion = 0` in the `[loracamera]` section of `platformio.ini`: the local node then asks for a picture every 10 s and the remote stays awake. Flash **both** boards after changing it. See [configuration.md](configuration.md#motion-detection-pir).
+
 ### Audio capture (optional, off by default)
 
-The firmware sends pictures only. To also capture microphone audio, set `audio = 1` in the `[loracamera]` section of `platformio.ini`, wire the microphone, and flash **both** boards. See [configuration.md](configuration.md#audio-capture-optional).
+The firmware sends pictures only. To also capture microphone audio, set `audio = 1` and `motion = 0` in the `[loracamera]` section of `platformio.ini`, wire the microphone, and flash **both** boards. See [configuration.md](configuration.md#audio-capture-optional).
 
 ### Everything else
 
@@ -63,6 +67,7 @@ Radio settings, TX power, pins and timing have working defaults. Radio settings 
 
 | Option | Default | See |
 |---|---|---|
+| `motion` | `1` (PIR fitted) | [Motion detection](configuration.md#motion-detection-pir) |
 | `audio` | `0` | [Audio capture](configuration.md#audio-capture-optional) |
 | `display` | `0` (no OLED) | [OLED display](configuration.md#oled-display-optional) |
 | `sdcard` | `1` (SD card on the base station) | [SD card](configuration.md#sd-card-base-station) |
@@ -128,7 +133,7 @@ pio run -e local -t upload --upload-port /dev/ttyACM1
 
 ### If the upload can't connect
 
-Put the board in download mode by hand:
+Put the board in download mode by hand. A remote node already running `motion = 1` firmware sleeps with its USB port gone, so it always needs this:
 
 1. Hold **PRG**.
 2. Press and release **RST**.
@@ -143,6 +148,6 @@ pio device monitor                      # 115200 baud; the baud rate is ignored 
 pio device monitor -p /dev/ttyACM1
 ```
 
-Native USB re-enumerates on reset, so the monitor may lose output from the first moments after boot. Press RST with the monitor open, or reconnect it, to see the boot messages.
+Native USB re-enumerates on reset, so the monitor may lose output from the first moments after boot. Press RST with the monitor open, or reconnect it, to see the boot messages. A remote node with `motion = 1` goes to sleep right after boot and comes back only when the PIR triggers; the monitor reconnects each time (under WSL2, attach with `--auto-attach`).
 
 The next step is [usage.md](usage.md).

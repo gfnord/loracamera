@@ -5,6 +5,11 @@
 #if LORACAMERA_AUDIO
 #include "driver/i2s.h"
 #endif
+#if LORACAMERA_MOTION
+#include "esp_sleep.h"
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#endif
 
 // Re-encoding of the camera JPEG, set in the [loracamera] section of platformio.ini.
 #ifndef LORACAMERA_JPEG_QUALITY
@@ -30,6 +35,12 @@ static_assert(LORACAMERA_NIGHT_MAX_CHROMA >= 0 && LORACAMERA_NIGHT_MAX_CHROMA <=
 #define CAMERATX_BOARDRX 47
 #define CAMERARX_BOARDTX 48
 #define CAMERA_ONOFF 41
+
+#if LORACAMERA_MOTION
+// PIR sensor output, HIGH = motion. Must be an RTC GPIO (0-21) to wake the chip from deep sleep.
+#define MOTION_PIR 6
+static_assert(MOTION_PIR <= 21, "MOTION_PIR must be an RTC GPIO (0-21)");
+#endif
 
 // The VC0706 always starts at this speed: the baud change below is not saved on the camera.
 #define CAMERA_DEFAULT_BAUD 38400
@@ -178,6 +189,9 @@ void setup() {
 
 	// Set up the camera.  
 	pinMode(CAMERA_ONOFF, OUTPUT);
+#if LORACAMERA_MOTION
+	gpio_hold_dis((gpio_num_t)CAMERA_ONOFF); // held LOW through deep sleep by sleepUntilMotion()
+#endif
 	Serial1.begin(CAMERA_DEFAULT_BAUD,SERIAL_8N1, CAMERATX_BOARDRX, CAMERARX_BOARDTX);
 	cam = new Adafruit_VC0706(&Serial1);
 	camera_jpeg = (uint8_t *)ps_malloc(CAMERA_JPEG_MAX);
@@ -282,6 +296,128 @@ void takePicture() {
 }
 
 
+// Number of data packets content_length bytes take.
+uint16_t packetCount() {
+	uint16_t packets = content_length / LORA_TRANSFER_BUFFER;
+	if(content_length % LORA_TRANSFER_BUFFER != 0) packets++;
+	return packets;
+}
+
+// Tell the local node how many data packets to request: F9 C2 nL nH, sent repeatedly.
+void announce(uint16_t packets) {
+	lora_buffer[0] = 0xF9;
+	lora_buffer[1] = 0xC2;
+	lora_buffer[2] = u0(packets);
+	lora_buffer[3] = u1(packets);
+	uint8_t send_repeat = RFT_RESPONSE_REPEAT;
+	while(send_repeat-- > 0) {
+		radioSend(lora_buffer, 4);
+		delay(RFT_RESPONSE_GAP_MS);
+	}
+}
+
+// Answer a packet request (F9 FE iL iH) for an existing packet. Returns false, sending
+// nothing, for anything else.
+bool servePacketRequest(const uint8_t *request, size_t packetSize) {
+	if(packetSize != 4 || request[0] != 0xF9 || request[1] != 0xFE) return false;
+	uint16_t cd = u(request[2], request[3]); // cd is the # of the packet they want
+	if(LORA_TRANSFER_BUFFER * (uint32_t)cd >= content_length) return false;
+	uint32_t byte_start = LORA_TRANSFER_BUFFER * cd;
+	uint8_t bytes_to_send = LORA_TRANSFER_BUFFER;
+
+	if(cd == (content_length / LORA_TRANSFER_BUFFER)) { // if it's last packet
+		bytes_to_send = content_length % LORA_TRANSFER_BUFFER;
+	}
+	Serial.printf("Packet %d was requested. byte_start is %d. content_length %d\n", 
+		cd, byte_start, content_length);
+
+	lora_buffer[0] = u0(cd);
+	lora_buffer[1] = u1(cd);
+	// +2 is for the uint16_t header that has the packet # in it
+	for(uint32_t i=byte_start;i<byte_start+bytes_to_send;i++) {
+		lora_buffer[i-byte_start+2] = transfer_buffer[i];
+	}
+	delay(5); // turnaround guard: the requester needs ~1 ms to get back into receive mode
+	radioSend(lora_buffer, bytes_to_send+2);
+	delay(20);
+	return true;
+}
+
+#if LORACAMERA_MOTION
+// Take a picture and push it: announce it until the local node starts requesting
+// packets, then serve them until it sends "done" (F9 FA) or goes quiet.
+void pushPicture() {
+	takePicture();
+	uint16_t packets = packetCount();
+	if(packets == 0) {
+		Serial.printf("No picture to send\n");
+		return;
+	}
+	uint8_t request[4];
+	uint8_t announcements = 0;
+	bool requested = false;
+	uint32_t last = 0; // last announcement, then last request once requests arrive
+	while(true) {
+		size_t packetSize = radioReceive(request, sizeof(request));
+		if(servePacketRequest(request, packetSize)) {
+			requested = true;
+			last = millis();
+		} else if(packetSize == 2 && request[0] == 0xF9 && request[1] == 0xFA) {
+			Serial.printf("Transfer done\n");
+			return;
+		} else if(requested) {
+			if(millis() - last > MOTION_SERVE_IDLE_MS) {
+				Serial.printf("No request for %u s, stopping\n", MOTION_SERVE_IDLE_MS / 1000);
+				return;
+			}
+		} else if(announcements == 0 || millis() - last > MOTION_ANNOUNCE_GAP_MS) {
+			if(announcements == MOTION_ANNOUNCE_TRIES) {
+				Serial.printf("The local node never answered; picture dropped\n");
+				return;
+			}
+			Serial.printf("Announcing %u bytes in %d packets\n", content_length, packets);
+			announce(packets);
+			announcements++;
+			last = millis();
+		}
+		delay(20);
+	}
+}
+
+// Power everything down and deep-sleep until the PIR output goes HIGH. Never returns:
+// the chip restarts at setup() when it wakes.
+void sleepUntilMotion() {
+	radioSleep();
+	Serial1.end(); // don't drive the camera's RX line while it's unpowered
+	vextOff();
+	// GPIO41 would float in deep sleep, and the boost converter's EN may be pulled up:
+	// hold it LOW. Digital pads (22+) also need the deep-sleep hold, which latches all of
+	// them (Vext stays off).
+	digitalWrite(CAMERA_ONOFF, LOW);
+	gpio_hold_en((gpio_num_t)CAMERA_ONOFF);
+	gpio_deep_sleep_hold_en();
+	// The pull-down keeps an unplugged PIR from waking the board; RTC pulls need the
+	// RTC peripherals powered during sleep.
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+	rtc_gpio_pullup_dis((gpio_num_t)MOTION_PIR);
+	rtc_gpio_pulldown_en((gpio_num_t)MOTION_PIR);
+	esp_sleep_enable_ext1_wakeup(1ULL << MOTION_PIR, ESP_EXT1_WAKEUP_ANY_HIGH);
+	Serial.printf("Sleeping until the PIR on GPIO%d sees motion\n", MOTION_PIR);
+	Serial.flush();
+	esp_deep_sleep_start();
+}
+
+// Runs once per wake-up.
+void loop() {
+	if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+		Serial.printf("Motion detected\n");
+		pushPicture();
+	}
+	// After power-on or reset, just arm the PIR: pictures are taken on motion only.
+	sleepUntilMotion();
+}
+
+#else
 void loop() { 
 	// Check for inbound packets and respond to them
 	uint8_t request[4];
@@ -302,45 +438,15 @@ void loop() {
 			}
 #endif
 			// Now respond to the RFT with the # of packets to expect
-			uint16_t packets = content_length / LORA_TRANSFER_BUFFER;
-			if(content_length % LORA_TRANSFER_BUFFER != 0) packets++;
+			uint16_t packets = packetCount();
 			Serial.printf("RFT received. Content length is %d; buffer count %d. Packets to send is %d\n", 
 				content_length, LORA_TRANSFER_BUFFER, packets);
-			lora_buffer[0] = 0xF9;
-			lora_buffer[1] = 0xC2;
-			lora_buffer[2] = u0(packets);
-			lora_buffer[3] = u1(packets);
-			uint8_t send_repeat = RFT_RESPONSE_REPEAT;
-			while(send_repeat-- > 0) {
-				radioSend(lora_buffer, 4);
-				delay(RFT_RESPONSE_GAP_MS);
-			}
+			announce(packets);
 		}
-	} else if (packetSize == 4) {  // probably a request for packet
-		uint8_t a = request[0];
-		uint8_t b = request[1];
-		uint16_t cd = u(request[2], request[3]); // cd is the # of the packet they want
-		if(a==0xF9 && b==0xFE && LORA_TRANSFER_BUFFER * (uint32_t)cd < content_length) { // request for an existing packet
-			uint32_t byte_start = LORA_TRANSFER_BUFFER * cd;
-			uint8_t bytes_to_send = LORA_TRANSFER_BUFFER;
-
-			if(cd == (content_length / LORA_TRANSFER_BUFFER)) { // if it's last packet
-				bytes_to_send = content_length % LORA_TRANSFER_BUFFER;
-			}
-			Serial.printf("Packet %d was requested. byte_start is %d. content_length %d\n", 
-				cd, byte_start, content_length);
-
-			lora_buffer[0] = u0(cd);
-			lora_buffer[1] = u1(cd);
-			// +2 is for the uint16_t header that has the packet # in it
-			for(uint32_t i=byte_start;i<byte_start+bytes_to_send;i++) {
-				lora_buffer[i-byte_start+2] = transfer_buffer[i];
-			}
-			delay(5); // turnaround guard: the requester needs ~1 ms to get back into receive mode
-			radioSend(lora_buffer, bytes_to_send+2);
-			delay(20);
-		} 
+	} else {
+		servePacketRequest(request, packetSize);
 	}
 	delay(20);
 
 }
+#endif

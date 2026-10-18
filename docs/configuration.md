@@ -1,17 +1,46 @@
 # Configuration reference
 
-All settings are compile-time. Change them, rebuild, and reflash. **`audio` in the `[loracamera]` section of `platformio.ini` and the settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.** `display` and `sdcard` only affect the local node, and the camera settings only the remote node.
+All settings are compile-time. Change them, rebuild, and reflash. **`audio` and `motion` in the `[loracamera]` section of `platformio.ini` and the settings in `lib/HeltecV4R8/HeltecV4R8.h` are shared: reflash both boards after changing any of them.** `display` and `sdcard` only affect the local node, and the camera settings only the remote node.
+
+## Motion detection (PIR)
+
+Motion detection is **on by default**: the remote node sleeps and takes a picture only when its PIR sensor sees movement. Set in `platformio.ini`:
+
+```ini
+[loracamera]
+motion = 1   ; default; 0 = no PIR, the local node polls for a picture every 10 s
+```
+
+Then rebuild and reflash **both** boards: the two values use different protocols ([protocol.md](protocol.md#motion-mode-motion--1)). The value reaches the code as `LORACAMERA_MOTION`.
+
+| | `motion = 1` (default) | `motion = 0` |
+|---|---|---|
+| Who starts a transfer | the remote node, when the PIR triggers | the local node, every `CHECK_EVERY_MS` |
+| Remote node between pictures | deep sleep (radio asleep, front end, Vext and camera off) | awake in receive mode (~75 mA) |
+| Local node | listens for announcements, never transmits on its own | sends a request every `CHECK_EVERY_MS` |
+| PIR wiring | GPIO6 + 3V3 + GND ([hardware.md](hardware.md#motion-sensor-pir)) | not needed |
+| Audio | not available (`audio = 1` fails the build) | optional |
+
+What happens on the remote node with `motion = 1`:
+
+1. **Power-on or reset:** it starts the radio, puts it straight back to sleep and goes to deep sleep. No picture is taken until the PIR triggers.
+2. **PIR output goes HIGH:** the chip wakes and restarts. It takes a picture (same capture and re-encoding as before), then announces it to the local node, repeating the announcement every `MOTION_ANNOUNCE_GAP_MS` (5 s) until the first packet request arrives, at most `MOTION_ANNOUNCE_TRIES` (6) times. If nobody answers, the picture is dropped.
+3. It serves packet requests until the local node sends "done", or until no request has arrived for `MOTION_SERVE_IDLE_MS` (30 s).
+4. It goes back to deep sleep. If the PIR output is still HIGH, it wakes again at once and takes the next picture.
+
+The PIR pin is `MOTION_PIR` in `src/remote/main.cpp`. It must be an RTC GPIO (0–21) to wake the chip; the build fails otherwise.
 
 ## Audio capture (optional)
 
-Audio is **off by default**, so the link carries only pictures. To build both nodes with microphone support, set this in `platformio.ini`:
+Audio is **off by default**, so the link carries only pictures. Audio needs the polling mode, so to build both nodes with microphone support set this in `platformio.ini`:
 
 ```ini
 [loracamera]
 audio = 1
+motion = 0
 ```
 
-Then rebuild and reflash **both** boards. The value reaches the code as the `LORACAMERA_AUDIO` macro (`-DLORACAMERA_AUDIO=${loracamera.audio}`).
+Then rebuild and reflash **both** boards. The value reaches the code as the `LORACAMERA_AUDIO` macro (`-DLORACAMERA_AUDIO=${loracamera.audio}`). `audio = 1` with `motion = 1` fails the build (`motion = 1 needs audio = 0`): the remote node has no way to announce audio, and the microphone's data pin is the PIR pin.
 
 | | `audio = 0` (default) | `audio = 1` |
 |---|---|---|
@@ -123,6 +152,10 @@ These are calculated with the Semtech airtime formula, not measured.
 | `MAX_TRANSFER_BUFFER` | `125000` | Size of the capture/receive buffer on each node (bytes). Captures must fit |
 | `LORA_TRANSFER_BUFFER` | `250` | Payload bytes per data packet. Each packet also carries a 2-byte header, and the LoRa maximum is 255 |
 | `RFT_RESPONSE_REPEAT` / `RFT_RESPONSE_GAP_MS` | `5` / `20` | The remote sends its "N packets" reply this many times, this far apart. The local node waits out the repeats (from the radio's actual airtime) before its first packet request |
+| `MOTION_ANNOUNCE_GAP_MS` / `MOTION_ANNOUNCE_TRIES` | `5000` / `6` | `motion = 1`: the remote repeats its announcement this often, this many times, until the first packet request. Covers a local node that is booting, saving or uploading |
+| `MOTION_PACKET_GIVE_UP_MS` | `20000` | `motion = 1`: the local node abandons the transfer when one packet hasn't arrived after this long (the remote has probably gone back to sleep) and keeps what it has |
+| `MOTION_SERVE_IDLE_MS` | `30000` | `motion = 1`: the remote goes back to sleep after this long without a packet request. Must exceed `MOTION_PACKET_GIVE_UP_MS` (checked at build time) |
+| `MOTION_DONE_REPEAT` | `3` | `motion = 1`: the local node sends "done" this many times, `RFT_RESPONSE_GAP_MS` apart |
 
 ## Local node (`src/local/main.cpp`)
 
@@ -130,13 +163,13 @@ These are calculated with the Semtech airtime formula, not measured.
 |---|---|---|
 | `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw`. Non-2xx responses and connection errors are logged as `Upload failed: …`; the file isn't retried (it's on the SD card with `sdcard = 1`) |
 | `WIFI_SSID`, `WIFI_PASS` | from `auth.h` | 2.4 GHz network |
-| `CHECK_EVERY_MS` | `10000` | Pause after a finished transfer before the next request |
-| `MAX_RFT_RESPONSE_MS` | `30000` | How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480 and 38400 baud, per the original code comment; less at 115200) + 1 s power-off + re-encoding (≈ 1 s [estimate]); audio (if enabled) = `AUDIO_SECONDS` |
-| `REQUEST_TIMER` | `200` | Retries for a request, and per data packet. Must fit in a `uint8_t` (≤ 255) |
+| `CHECK_EVERY_MS` | `10000` | `motion = 0` only. Pause after a finished transfer before the next request |
+| `MAX_RFT_RESPONSE_MS` | `30000` | `motion = 0` only. How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480 and 38400 baud, per the original code comment; less at 115200) + 1 s power-off + re-encoding (≈ 1 s [estimate]); audio (if enabled) = `AUDIO_SECONDS` |
+| `REQUEST_TIMER` | `200` | Retries for a request, and per data packet (with `motion = 1` also capped by `MOTION_PACKET_GIVE_UP_MS`). Must fit in a `uint8_t` (≤ 255) |
 | `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255 |
 | `WIFI_CONNECT_TIMEOUT_MS` | `20000` | How long `setup()` waits for Wi-Fi before starting without it. The driver keeps reconnecting in the background, and uploads are skipped (`Wi-Fi not connected, upload skipped`) until it's up |
 
-With the default `audio = 0`, every request is for a **picture**. With `audio = 1`, the first request after boot is for a picture, and the type then alternates between picture and audio after each completed transfer.
+With `motion = 1` (default), every transfer is a **picture** the remote node announced. With `motion = 0` and the default `audio = 0`, every request is for a picture. With `audio = 1`, the first request after boot is for a picture, and the type then alternates between picture and audio after each completed transfer.
 
 ## Remote node (`src/remote/main.cpp`)
 
@@ -146,12 +179,13 @@ With the default `audio = 0`, every request is for a **picture**. With `audio = 
 |---|---|---|
 | `CAMERATX_BOARDRX` | 47 | UART1 RX (camera TX) |
 | `CAMERARX_BOARDTX` | 48 | UART1 TX (camera RX) |
-| `CAMERA_ONOFF` | 41 | Camera power control, HIGH = on |
+| `CAMERA_ONOFF` | 41 | Camera power control, HIGH = on. Held LOW through deep sleep with `motion = 1` |
+| `MOTION_PIR` | 6 | PIR output, HIGH = motion (`motion = 1` only). Must be an RTC GPIO (0–21) |
 | `I2S_BCK` | 4 | Mic bit clock (`audio = 1` only) |
 | `I2S_LRC` | 3 | Mic word select (`audio = 1` only) |
 | `I2S_DIN` | 6 | Mic data (`audio = 1` only) |
 
-Pick replacements only from the free pins listed in [hardware.md](hardware.md#v4-r8-pin-map): 3, 4, 6, 15, 16, 38, 39, 41, 42, 47, 48. Avoid 45 and 46, which are strapping pins, and 43/44, where the ROM bootloader prints at boot.
+Pick replacements only from the free pins listed in [hardware.md](hardware.md#v4-r8-pin-map): 3, 4, 6, 15, 16, 38, 39, 41, 42, 47, 48, and for `MOTION_PIR` only from 3, 4, 6, 15, 16 (RTC GPIOs). Avoid 45 and 46, which are strapping pins, and 43/44, where the ROM bootloader prints at boot.
 
 ### Audio
 
@@ -225,9 +259,9 @@ Smaller resolutions and lower quality transfer much faster. See the [image size 
 
 ## Adding a new payload type
 
-The transport moves any byte buffer. To send something else, such as sensor logs:
+The transport moves any byte buffer. To send something else, such as sensor logs (with `motion = 0`, where the local node asks for each payload):
 
-1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio, reserved even when audio is disabled), for example `0xFB`. `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
+1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio, reserved even when audio is disabled), for example `0xFB`. `0xFA`, `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
 2. **Local:** send the new byte from `request_transmission()`, which currently sends `0xFC + content_type`. Give it a URL and `Content-Type` in `put_to_server()`.
 3. **Server:** `listen.py` takes the file extension from the last three characters of the URL path, so `/data.csv` is saved as `MMDDHHMM.csv`.
 

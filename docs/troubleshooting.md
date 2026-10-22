@@ -2,10 +2,10 @@
 
 ## First bring-up checklist
 
-Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver, which has a +21 dB LNA.
+Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver (the V4-R8's front end adds a +21 dB LNA).
 
-1. **Remote radio.** Flash `remote`, open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` and its USB port disappears; that's expected.
-2. **Local radio, SD card and Wi-Fi.** Flash `local` with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With `display = 1` the OLED shows the same LoRa failure message.
+1. **Remote radio.** Flash `remote` (V2: `remote_v2`), open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and, on a V4-R8, its USB port disappears; that's expected. On a V2 remote the log also says `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`; that's expected too.
+2. **Local radio, SD card and Wi-Fi.** Flash `local` (V2: `local_v2`) with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With the display on, the OLED ends on `Base station ready` with the Wi-Fi and SD card state, or shows `Starting LoRa failed!`.
 3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
 4. **Link.** With `motion = 1`, wave a hand in front of the PIR: within ~30 s the local log shows `Motion picture announced, N packets`, then packet progress with RSSI. With `motion = 0` it shows `Receiving rft response, N packets` within ~30 s of booting.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
@@ -18,15 +18,16 @@ Go through these on the bench, with the boards a few metres apart. At very close
 Create `src/local/auth.h` (see [getting-started.md](getting-started.md#wi-fi-credentials-required)).
 
 ### Upload fails with `Failed to connect to ESP32-S3` or `No serial data received`
-- Enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing. A remote node built with `motion = 1` is in deep sleep with its USB port gone almost all the time, so it always needs this (or a PIR trigger at the right moment).
-- Under WSL2, the device re-enumerates when it enters the bootloader. Re-run `usbipd attach --wsl --busid <BUSID>`, or use `--auto-attach`.
-- With two boards connected, pass `--upload-port /dev/ttyACMx`.
+- V4-R8: enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing. A remote node built with `motion = 1` is in deep sleep with its USB port gone almost all the time, so it always needs this (or a PIR trigger at the right moment).
+- V2: the CP2102 should reset the board into download mode itself. Check the USB cable (some are charge-only), the port (`/dev/ttyUSB0`) and, on Windows, the CP210x driver. If it still fails, use the PRG/RST sequence above.
+- Under WSL2, a V4-R8 re-enumerates when it enters the bootloader. Re-run `usbipd attach --wsl --busid <BUSID>`, or use `--auto-attach`. A V2 (CP2102) needs only the one-time attach.
+- With two boards connected, pass `--upload-port /dev/ttyACMx` (V2: `/dev/ttyUSBx`).
 
-### `Permission denied: '/dev/ttyACM0'`
+### `Permission denied: '/dev/ttyACM0'` (or `/dev/ttyUSB0` on a V2)
 Add yourself to `dialout`, or install the PlatformIO udev rules (see [getting-started.md](getting-started.md#linux-permissions)).
 
 ### Serial monitor shows nothing
-The board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor. A remote node with `motion = 1` only has a USB port while it's awake (power-on, then each PIR trigger); `pio device monitor` reconnects when it comes back, and under WSL2 `usbipd attach --auto-attach` re-attaches it.
+On a V4-R8 the board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor. A V4-R8 remote node with `motion = 1` only has a USB port while it's awake (power-on, then each PIR trigger); `pio device monitor` reconnects when it comes back, and under WSL2 `usbipd attach --auto-attach` re-attaches it. A V2 talks through the CP2102, so its port stays present while the board sleeps; pass `-p /dev/ttyUSB0` if PlatformIO picks the wrong port.
 
 ## Radio
 
@@ -34,29 +35,29 @@ The board uses native USB CDC, so output written before the host opens the port 
 
 | Code | RadioLib meaning | Likely cause |
 |---|---|---|
-| `-2` | `ERR_CHIP_NOT_FOUND` | No SPI response: wrong board or a damaged SX1262 |
-| `-705` / `-707` | SPI command timeout / failed | BUSY pin stuck. Power-cycle the board |
-| `-703` | Invalid TCXO voltage | `LORA_TCXO_VOLTAGE` was changed. It must stay `1.8` |
-| `-12`, `-8`, `-9`, `-13` | Invalid frequency / bandwidth / SF / power | A value in `HeltecV4R8.h` is out of range |
+| `-2` | `ERR_CHIP_NOT_FOUND` | No SPI response: wrong board or a damaged SX1262 (V4-R8) / SX1276 (V2) |
+| `-705` / `-707` | SPI command timeout / failed | V4-R8 (SX1262): BUSY pin stuck. Power-cycle the board |
+| `-703` | Invalid TCXO voltage | V4-R8 only (the V2 has no TCXO setting). `LORA_TCXO_VOLTAGE` was changed. It must stay `1.8` |
+| `-12`, `-8`, `-9`, `-13` | Invalid frequency / bandwidth / SF / power | A link value in `lib/Board/Board.h`, or the TX power in the board header (`lib/Board/HeltecV4R8.h` / `lib/Board/HeltecV2.h`), is out of range |
 
 The full list is in RadioLib's `src/TypeDef.h`.
 
 ### No `rft response`: the local node keeps printing `Receive timer timed out`
 - Is the remote node powered and does its log show the radio started?
-- Both nodes must be flashed from the **same** `HeltecV4R8.h` (frequency, BW, SF, CR, sync word).
+- Both nodes must be flashed from the **same** `lib/Board/Board.h` (frequency, BW, SF, CR, sync word). Mixed V4-R8 / V2 pairs share these settings; the sync word `0x12` is the same on air for the SX1262 and SX1276. Mixed pairs are untested on hardware.
 - If the request log says `type 1`, the local node was built with `audio = 1`. A remote node built with `audio = 0` ignores audio requests. Use the same `audio` value in `platformio.ini` for both boards.
 - A picture can take ~25 s to capture. The local node waits `MAX_RFT_RESPONSE_MS` (30 s). If you raised the resolution or slowed the camera, raise that limit too.
 - Check the antennas on both boards.
 
 ### Motion mode: no pictures arrive
 - Both nodes must be built with the same `motion` value. A local node built with `motion = 0` sends requests that a sleeping remote never hears, and a local node built with `motion = 1` never asks a polling remote.
-- Does the remote wake? Watch its monitor (it reconnects on each wake-up) or its current draw while waving at the PIR. No wake: check the PIR's 3V3 and GND (`3V3`, not `Ve`, which is off during sleep), and that OUT goes to GPIO6 and reads ~3.3 V while triggered. Some PIRs need up to a minute after power-up before they trigger.
+- Does the remote wake? Watch its monitor (it reconnects on each wake-up on a V4-R8) or its current draw while waving at the PIR. No wake: check the PIR's 3V3 and GND (`3V3`, not `Ve`, which is off during sleep), and that OUT goes to GPIO6 (GPIO32 on a V2) and reads ~3.3 V while triggered. Some PIRs need up to a minute after power-up before they trigger. The V2's deep-sleep current has not been measured; don't assume the V4-R8 figures.
 - The remote wakes but logs `The local node never answered; picture dropped`: the local node wasn't listening for 30 s, or the link is down. See the radio checks above.
 - PIR sensors don't see through glass or clear plastic. Mount the lens outside the enclosure.
 
 ### Motion mode: pictures all the time
 - Something keeps the PIR output HIGH: moving branches, sun-warmed or wind-blown surfaces, a road, an animal sitting in view. The remote wakes again straight after each transfer while the output stays HIGH. Re-aim or mask the PIR lens, or shorten its range.
-- With nothing connected to GPIO6 the internal pull-down keeps the board asleep. If it wakes with no PIR fitted, look for a wiring fault pulling GPIO6 up.
+- With nothing connected to GPIO6 (GPIO32 on a V2) the internal pull-down keeps the board asleep. If it wakes with no PIR fitted, look for a wiring fault pulling that pin up.
 - A picture or two right after power-up is the PIR settling.
 
 ### `Remote stopped answering; abandoning the transfer at packet N`
@@ -64,7 +65,7 @@ With `motion = 1` the local node gives up after 20 s without the requested packe
 
 ### Transfers crawl: many `response timer timeout` or `LoRa receive error: -7`
 `-7` is a CRC error: the packet arrived corrupted. Both messages point to a weak or noisy link:
-- Watch the RSSI in the local node's serial log (`rssi: …` on each progress line), or on the OLED with `display = 1`. The SX1262's sensitivity at SF7/250 kHz is around −120 dBm. Readings within a few dB of that mean the link is marginal.
+- Watch the RSSI in the local node's serial log (`rssi: …` on each progress line), or on either node's OLED with the display on (the remote shows the RSSI of each request). The SX1262's sensitivity at SF7/250 kHz is around −120 dBm. Readings within a few dB of that mean the link is marginal.
 - Raise `LORA_SF` (see [configuration.md](configuration.md#range-vs-speed)), and keep the 4 s response-window limit in mind.
 - Improve antenna placement before raising TX power.
 
@@ -72,7 +73,7 @@ With `motion = 1` the local node gives up after 20 s without the requested packe
 This is harmless. A late reply to an earlier request arrived, and the local node asks again.
 
 ### TX works but the other side never receives
-On this board the KCT8103L front end must be powered and switched. `radioBegin()` drives GPIO7 and GPIO2 HIGH, and `radioSend()` drives GPIO5 HIGH during each transmission. If you reused any of GPIO2, 5 or 7 for something else, transmission breaks.
+V4-R8 only: its KCT8103L front end must be powered and switched. `radioBegin()` drives GPIO7 and GPIO2 HIGH, and `radioSend()` drives GPIO5 HIGH during each transmission. If you reused any of GPIO2, 5 or 7 for something else, transmission breaks. The V2 has no external front end (SX1276 on PA_BOOST), so this doesn't apply; if a V2 can't transmit, check the antenna and the LoRa init result.
 
 ## Local node
 
@@ -81,9 +82,9 @@ The base station waits `WIFI_CONNECT_TIMEOUT_MS` (20 s) at boot, then runs witho
 
 ### `SD card not found`
 - The card must be **FAT32**. 64 GB+ cards come formatted exFAT, which this firmware can't read: reformat them.
-- Check the wiring against [hardware.md](hardware.md#base-station-wiring): CS GPIO4, SCK GPIO39, MISO GPIO38, MOSI GPIO41, power from 3V3.
+- Check the wiring against [hardware.md](hardware.md#base-station-wiring): CS GPIO4, SCK GPIO39, MISO GPIO38, MOSI GPIO41, power from 3V3. On a V2 ([hardware.md](hardware.md#heltec-v2)): CS GPIO23, SCK GPIO22, MISO GPIO33, MOSI GPIO17, power from 3V3.
 - Breakouts with an AMS1117 regulator need 5 V and won't run from 3V3.
-- Nothing plugged into the GNSS connector: it shares GPIO38/39/41.
+- V4-R8: nothing plugged into the GNSS connector: it shares GPIO38/39/41.
 - The firmware retries before every file, so fixing the card doesn't need a reboot.
 
 ### `SD card: can't open …` / `wrote N of M bytes`
@@ -92,10 +93,13 @@ The card was removed or failed during a write. The base station remounts before 
 ### `SD card full`
 Copy the files off and delete them, or use a bigger card. New files are still uploaded if Wi-Fi is up.
 
+### `N packets don't fit this board's M-byte buffer; skipped`
+The picture announced by the remote is larger than the local board's transfer buffer (`MAX_TRANSFER_BUFFER`: 125000 bytes on a V4-R8, 72000 on a V2). The local node requests nothing, and with `motion = 1` still sends "done" so the remote sleeps. It only happens with a mixed pair: a V4-R8 remote sending more than 72000 bytes to a V2 local node. Keep `jpeg_quality` enabled on the V4-R8 remote (re-encoded pictures are 10–20 KB) or raise `camera_compression` so the camera JPEG is smaller, or use a V4-R8 as the local node.
+
 ### OLED stays black
-- The OLED is only driven when the firmware is built with `display = 1` in `platformio.ini`. The default is `0`, for boards without a display.
-- The OLED is powered from Vext (GPIO40, active **LOW**) and reset through GPIO21. Both are handled by `vextOn()` and `oledReset()`.
-- It's normal for the screen to stay blank until the first packet arrives.
+- The OLED is only driven when the firmware is built with the display on: `display = 1` for V4-R8 environments (default `0`, for boards without a display), `display_v2 = 1` for V2 environments (the default).
+- The OLED is powered from Vext (GPIO40 on a V4-R8, active **LOW**) and reset through GPIO21. On a V2, Vext is GPIO21 (active **LOW**) and reset is GPIO16 (SDA 4, SCL 15). Both are handled by `vextOn()` and `oledReset()`.
+- Both nodes draw a boot screen (`Base station` / `Remote node`) right after power-up. A `motion = 1` remote's screen goes dark when it goes to deep sleep: that's expected.
 
 ### Uploads never appear on the server
 - With `sdcard = 1` every picture is also on the card, so nothing is lost; copy the missed ones from `/loracam`.
@@ -107,8 +111,8 @@ Copy the files off and delete them, or use a bigger card. New files are still up
 ## Remote node
 
 ### `Turning on camera; reset with 0` / `Couldn't take pic`
-- Check the camera supply: it needs **5 V** (up to 325 mA with the IR LEDs on), and GPIO41 must actually switch it. On a LiPo the board has no 5 V rail (see [hardware.md](hardware.md#power)).
-- TX and RX are crossed: camera TX goes to GPIO47 and camera RX to GPIO48.
+- Check the camera supply: it needs **5 V** (up to 325 mA with the IR LEDs on), and GPIO41 (GPIO22 on a V2) must actually switch it. On a LiPo the board has no 5 V rail (see [hardware.md](hardware.md#power)).
+- TX and RX are crossed: camera TX goes to GPIO47 and camera RX to GPIO48. On a V2: camera TX goes to GPIO23 and camera RX to GPIO17.
 - The camera must power up at 38400 baud, its factory default. The firmware never changes the saved speed. If the camera's EEPROM was set to another baud by other software, set it back with that tool.
 - The VC0706 library is timing-sensitive: the serial calls were slowed down on purpose. Leave the `delay()`s in `takePicture()`/`turnOnCamera()` in place.
 
@@ -116,12 +120,16 @@ Copy the files off and delete them, or use a bigger card. New files are still up
 Pictures still work, just at the slower speed. Check for long or unshielded camera wires, which matter more at 115200. If it happens every time, set `camera_baud = 38400` in `platformio.ini` to skip the switch.
 
 ### Pictures are blocky, or still large
-- With re-encoding on (the default), `jpeg_quality` sets the size: lower is smaller and blockier. Compare the `Re-encoded … -> N bytes` lines in the remote log.
+- With re-encoding on (the default on a V4-R8), `jpeg_quality` sets the size: lower is smaller and blockier. Compare the `Re-encoded … -> N bytes` lines in the remote log.
 - With `jpeg_quality = 0`, `camera_compression` is the only size control: higher means smaller and blockier. Watch `len of frame is …`.
+- A V2 remote never re-encodes (no PSRAM), so `camera_compression` is the only size control there too.
 - A lower camera resolution (`VC0706_320x240` in `turnOnCamera()`) cuts size the most. See [configuration.md](configuration.md#image-re-encoding).
 
 ### `JPEG decode failed` / `JPEG encode failed` / `Sending the camera JPEG unchanged`
-Re-encoding failed, or wouldn't have made the image smaller, so the camera's original JPEG was sent. Nothing is lost. A one-off decode failure usually means a camera read went wrong. `out of PSRAM` means the board's PSRAM isn't working, which is unexpected on a V4-R8 built from this project.
+Re-encoding failed, or wouldn't have made the image smaller, so the camera's original JPEG was sent. Nothing is lost. A one-off decode failure usually means a camera read went wrong. `out of PSRAM` means the board's PSRAM isn't working, which is unexpected on a V4-R8 built from this project. A V2 has no PSRAM and never re-encodes, so it never logs these lines.
+
+### `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`
+Expected on a V2 remote, logged at boot. `jpeg_quality` and `night_grayscale` have no effect there: the camera JPEG is sent as is. Re-encoding needs a full-frame pixel buffer (640×480×3 ≈ 920 KB) that only fits in the V4-R8's PSRAM. To shrink the pictures, raise `camera_compression`.
 
 ### Night pictures still in colour (or day pictures in gray)
 Night detection compares each picture's mean colourfulness with `night_max_chroma` (default `12`). The remote log prints it on every picture: `Re-encoded 640x480 colour (chroma 15, …)`. Set `night_max_chroma` between the values you see for real night and day shots, then reflash the remote node.
@@ -133,14 +141,15 @@ The IR LEDs switch on by themselves when the camera's photocell sees darkness. L
 The camera stopped answering mid-image, and `takePicture()` retries indefinitely. Power-cycle the remote node and check the camera wiring and supply.
 
 ### Large images are skipped
-- Frames over **256 KB** (`CAMERA_JPEG_MAX`) don't fit the camera buffer: the remote logs `Can't read a … frame` and answers 0 packets.
-- After re-encoding, an image must fit **125,000 bytes** (`MAX_TRANSFER_BUFFER`). Otherwise the camera's JPEG is used if it fits, and if neither fits nothing is sent (`doesn't fit the … transfer buffer`).
+- Frames over **256 KB** (`CAMERA_JPEG_MAX`) don't fit the camera buffer: the remote logs `Can't read a … frame` and answers 0 packets. On a V2 the camera buffer is smaller: `Can't read a N-byte frame into the 72000-byte camera buffer`. Raise `camera_compression` (the V2 sends the camera JPEG unchanged).
+- After re-encoding, an image must fit **125,000 bytes** (`MAX_TRANSFER_BUFFER`; 72,000 on a V2). Otherwise the camera's JPEG is used if it fits, and if neither fits nothing is sent (`doesn't fit the … transfer buffer`).
 
 The VC0706 library's old 16-bit read offset, which corrupted images over 64 KB, has been widened to 32 bits.
 
 ### Audio is silent or noise
 Audio exists only in builds with `audio = 1` in `platformio.ini`, on **both** nodes.
 - The firmware reads `I2S_CHANNEL_FMT_ONLY_RIGHT`. The original ESP32 swapped left and right in this mode, and the ESP32-S3 may not. If the file is silent, change it to `I2S_CHANNEL_FMT_ONLY_LEFT` in `src/remote/main.cpp`, or tie the mic's SEL pin to 3V3.
-- Check BCLK → GPIO4, LRCL → GPIO3, DOUT → GPIO6, and that the mic has 3.3 V.
+- Check BCLK → GPIO4, LRCL → GPIO3, DOUT → GPIO6, and that the mic has 3.3 V. On a V2: BCLK → GPIO13, LRCL → GPIO12, DOUT → GPIO39. GPIO12 is a strapping pin: nothing may pull it HIGH at reset.
 - Too quiet or clipping: adjust `GAIN_FACTOR`.
+- V2 remote: `Audio buffer full (72000 bytes), clip cut short` is expected. The V2's 72000-byte transfer buffer is smaller than a full 5 s clip (110250 bytes), so recording stops when the buffer is full and the clip is about 3.2 s long. V2 audio is untested on hardware.
 - Make sure the file is decoded as s16le, 11025 Hz, mono (see [usage.md](usage.md#audio)).

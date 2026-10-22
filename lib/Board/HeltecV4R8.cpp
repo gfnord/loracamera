@@ -1,4 +1,6 @@
-#include "HeltecV4R8.h"
+// Radio for the Heltec V4-R8: SX1262 behind the KCT8103L front end.
+#if defined(LORACAMERA_BOARD_HELTEC_V4R8)
+#include "Board.h"
 
 #include <RadioLib.h>
 #include <SPI.h>
@@ -10,25 +12,6 @@ static volatile bool packetReady = false;
 static int lastRssi = 0;
 
 static void IRAM_ATTR onPacketReceived() { packetReady = true; }
-
-void vextOn() {
-	pinMode(PIN_VEXT_CTRL, OUTPUT);
-	digitalWrite(PIN_VEXT_CTRL, LOW);
-	delay(50); // let the Vext LDO settle
-}
-
-void vextOff() {
-	pinMode(PIN_VEXT_CTRL, OUTPUT);
-	digitalWrite(PIN_VEXT_CTRL, HIGH);
-}
-
-void oledReset() {
-	pinMode(PIN_OLED_RST, OUTPUT);
-	digitalWrite(PIN_OLED_RST, LOW);
-	delay(20);
-	digitalWrite(PIN_OLED_RST, HIGH);
-	delay(20);
-}
 
 // Drive pin as an output at level, then release a hold left by radioSleep(). The level
 // is set first so the pin doesn't glitch to its reset state.
@@ -114,3 +97,5 @@ size_t radioReceive(uint8_t *buf, size_t maxLen) {
 int radioLastRssi() { return lastRssi; }
 
 uint32_t radioTimeOnAirMs(size_t len) { return (radio.getTimeOnAir(len) + 999) / 1000; }
+
+#endif

@@ -8,7 +8,8 @@ Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base sta
 
 | Qty | Part | Notes |
 |---|---|---|
-| 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end. 868–928 MHz high-power model. Sold with or without a 0.96" OLED; the firmware works either way ([configuration.md](configuration.md#oled-display-optional)) |
+| 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end. 868–928 MHz high-power model. Sold with or without a 0.96" OLED; the firmware works either way ([configuration.md](configuration.md#oled-display)) |
+| 2 | Alternative: [Heltec WiFi LoRa 32 V2](#heltec-v2) | ESP32 (no PSRAM), 8 MB flash, SX1276, 0.96" OLED, CP2102 USB-UART. Can replace the V4-R8 on either node, or be mixed with it. Pins, wiring and limits in [Heltec V2](#heltec-v2). Compiled but untested on hardware. No solar input (the Solar row below doesn't apply) |
 | 2 | 915 MHz LoRa antenna, IPEX (U.FL) connector | One per board. Check whether your kit includes them. Never transmit without an antenna attached |
 | 2 | LiPo cell, 3.7 V, with protection circuit | One per node. JST **SH 1.25 mm** 2-pin plug to fit the board. ≥ 3000 mAh on the remote node, larger on the base station (see [sizing](#battery-and-solar-sizing)). Check the plug polarity against the board's BAT marking before connecting: LiPo polarity isn't standardised |
 | 2 | Solar panel, 5 V nominal, 2–3 W | One per node. Output must stay within Heltec's 4.7–6 V solar-input range. JST **SH 1.25 mm** 2-pin plug to the board's SOLAR connector |
@@ -22,7 +23,7 @@ Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base sta
 | Qty | Part | Notes |
 |---|---|---|
 | 1 | [Adafruit 613: weatherproof TTL serial JPEG camera with IR LEDs (VC0706)](https://www.adafruit.com/product/613) | 5 V supply, 3.3 V serial, built-in night vision (see [below](#camera-adafruit-613)). Comes with a 1 m cable with bare leads |
-| 1 | 5 V boost converter module | ≥ 1 A out, input range covering 3.0–4.2 V, **enable pin that is active-high and accepts 3.3 V logic** (driven by GPIO41). Wiring in [Power](#power) |
+| 1 | 5 V boost converter module | ≥ 1 A out, input range covering 3.0–4.2 V, **enable pin that is active-high and accepts 3.3 V logic** (driven by GPIO41 on the V4-R8, GPIO22 on the V2). Wiring in [Power](#power) |
 | 1 | Battery + tap for the boost converter | A Y-split on the battery's + lead, or a soldered tap. The board's headers don't expose the battery voltage |
 | 1 | PIR motion sensor, 3.3 V supply and output, e.g. AM312 | **With `motion = 1` (default)**. Runs from 2.7–12 V on the always-on `3V3` pin; output HIGH (3.3 V) while it sees motion. The HC-SR501 needs ≥ 4.5 V, which a battery-powered board doesn't have. A PIR can't see through glass or clear plastic: mount its lens outside the enclosure, aimed where the camera looks ([wiring](#motion-sensor-pir)) |
 | 1 | [Adafruit I2S MEMS microphone (SPH0645)](https://www.adafruit.com/product/3421) | **Only if built with `audio = 1`**, which needs `motion = 0` ([configuration.md](configuration.md#audio-capture-optional)) |
@@ -41,7 +42,7 @@ Heltec's V4-R8 datasheet (`WiFi_LoRa_32_V4R8.pdf`) and schematic (`HTIT-WBR8H_V4
 
 ## V4-R8 pin map
 
-Pins used by the board itself. They're defined in `lib/HeltecV4R8/HeltecV4R8.h`.
+Pins used by the board itself. The board and project pins are defined in `lib/Board/HeltecV4R8.h` (shared link settings are in `lib/Board/Board.h`). The V2's are in [Heltec V2](#heltec-v2).
 
 | Function | GPIO | Notes |
 |---|---|---|
@@ -53,7 +54,7 @@ Pins used by the board itself. They're defined in `lib/HeltecV4R8/HeltecV4R8.h`.
 | Front end mode `PA_CTX` | 5 | HIGH while transmitting, LOW for LNA receive |
 | Front end `PA_CPS` | (SX1262 DIO2) | Switched by the radio (DIO2 as RF switch) |
 | Vext control | 40 | P-MOSFET gate: **LOW = Vext on**. Vext feeds the OLED and the two `Ve` header pins |
-| OLED SDA / SCL / RST | 17 / 18 / 21 | SSD1315, I2C address 0x3C, SSD1306-compatible. Driven only when built with `display = 1`; free GPIOs otherwise |
+| OLED SDA / SCL / RST | 17 / 18 / 21 | SSD1315, I2C address 0x3C, SSD1306-compatible. Driven on either node only when built with `display = 1`; free GPIOs otherwise |
 | LED (white) | 46 | Also a strapping pin; unused by the firmware |
 | PRG button | 0 | Hold at reset to enter the ROM bootloader |
 | Battery voltage | 1 | 390K/100K divider, always connected; unused by the firmware |
@@ -80,11 +81,11 @@ From the KCT8103L truth table:
 
 ## Remote node wiring
 
-All peripherals use free header GPIOs. The ESP32-S3 pins are **3.3 V only and not 5 V tolerant**.
+All peripherals use free header GPIOs. The ESP32-S3 pins are **3.3 V only and not 5 V tolerant**. The diagram and the tables in this section are for the V4-R8; V2 wiring is in [Heltec V2](#heltec-v2).
 
 ![Wiring diagram of the remote node: Adafruit 613 camera, 5 V boost converter, PIR motion sensor, LiPo, solar panel and optional I2S microphone](images/wiring.svg)
 
-| Peripheral pin | V4-R8 pin | Define in `src/remote/main.cpp` |
+| Peripheral pin | V4-R8 pin | Define in `lib/Board/HeltecV4R8.h` |
 |---|---|---|
 | Camera TX (out of camera) | GPIO47 (header J2) | `CAMERATX_BOARDRX` |
 | Camera RX (into camera) | GPIO48 (header J2) | `CAMERARX_BOARDTX` |
@@ -130,11 +131,11 @@ The NTSC video output is unused.
 
 ## Base station wiring
 
-The base station (local node) saves every received file to a microSD card (`sdcard = 1`, the default; see [configuration.md](configuration.md#sd-card-base-station)). It runs from its own LiPo and solar panel, connected exactly like on the remote node.
+The base station (local node) saves every received file to a microSD card (`sdcard = 1`, the default; see [configuration.md](configuration.md#sd-card-base-station)). It runs from its own LiPo and solar panel, connected exactly like on the remote node. The diagram and table below are for the V4-R8; for the V2 see [Heltec V2](#heltec-v2).
 
 ![Wiring diagram of the base station: microSD breakout on header J3, LiPo and solar panel on the board's JST connectors, LoRa and Wi-Fi antennas](images/wiring-base.svg)
 
-| SD breakout pin | V4-R8 pin | Define in `src/local/storage.cpp` |
+| SD breakout pin | V4-R8 pin | Define in `lib/Board/HeltecV4R8.h` |
 |---|---|---|
 | GND | GND (J3 pin 1) | |
 | 3V / VCC | 3V3 (J3 pin 2) | |
@@ -148,6 +149,8 @@ The base station (local node) saves every received file to a microSD card (`sdca
 - Power the breakout from **3V3**, not from `Ve` or `5V`. `5V` only exists on USB power, and `Ve` is switched by the firmware.
 
 ## Power
+
+This section and its battery sizing are for the V4-R8. The V2 differs: see [Heltec V2](#heltec-v2).
 
 | Source | Notes |
 |---|---|
@@ -229,3 +232,97 @@ For solar operation with `motion = 0`, raise `CHECK_EVERY_MS` in `src/local/main
 - use a larger cell (6000 mAh or more) to ride out cloudy days, and expect the battery to run down slowly in poor weather;
 - if Wi-Fi isn't reachable, the driver keeps retrying in the background, which costs power without uploading anything;
 - a USB supply removes the constraint where mains power is available.
+
+## Heltec V2
+
+The Heltec WiFi LoRa 32 V2 can run either node, alone or mixed with a V4-R8 (e.g. V2 remote + V4-R8 local; same link settings, and sync word 0x12 is the same on air for the SX1262 and SX1276). **Compiled but untested on hardware**, as are mixed pairs. Build and flash with the `remote_v2` and `local_v2` environments (`pio run -e remote_v2 -t upload`, `pio run -e local_v2 -t upload`); plain `pio run` builds only the V4-R8 environments. Pins are defined in `lib/Board/HeltecV2.h`. The wiring diagrams in `docs/images` are V4-R8 only. This page refers to V2 pins by GPIO number only.
+
+| Item | V2 |
+|---|---|
+| MCU | ESP32-D0WDQ6, **no PSRAM**, 8 MB flash (`default_8MB.csv`, 3.2 MB app slot) |
+| Radio | SX1276 on PA_BOOST, no external amplifier or front end |
+| Display | 0.96" OLED, SSD1306 |
+| USB | CP2102 USB-UART (`/dev/ttyUSB0` on Linux; Windows and older macOS need the CP210x driver), auto-reset for flashing, upload speed 460800 |
+| Battery | LiPo connector (JST 1.25) with charger. **No solar input** |
+| Static RAM (from `pio run`, `display_v2 = 1`) | `local_v2` 120804 B, `remote_v2` 96644 B of 327680. Runtime heap (Wi-Fi, HTTP) not measured on hardware |
+
+### V2 pin map
+
+Pins used by the board itself.
+
+| Function | GPIO | Notes |
+|---|---|---|
+| Vext control | 21 | **LOW = Vext on**. Feeds the OLED and the `Ve` header pins |
+| LED | 25 | |
+| OLED SDA / SCL / RST | 4 / 15 / 16 | Status screen on either node, on by default (`display_v2 = 1`) |
+| SX1276 NSS | 18 | |
+| SX1276 SCK / MOSI / MISO | 5 / 27 / 19 | |
+| SX1276 RESET | 14 | |
+| SX1276 DIO0 | 26 | RX/TX-done interrupt |
+| SX1276 DIO1 | 35 | |
+
+### V2 remote node wiring
+
+| Peripheral pin | V2 pin | Define in `lib/Board/HeltecV2.h` |
+|---|---|---|
+| Camera TX (out of camera) | GPIO23 | `CAMERATX_BOARDRX` |
+| Camera RX (into camera) | GPIO17 | `CAMERARX_BOARDTX` |
+| Camera power switch control | GPIO22 | `CAMERA_ONOFF` |
+| PIR VCC / GND (`motion = 1`) | 3V3 / GND | |
+| PIR OUT (`motion = 1`) | GPIO32 | `MOTION_PIR` |
+| Mic BCLK (`audio = 1` only) | GPIO13 | `I2S_BCK` |
+| Mic LRCL / WS (`audio = 1` only) | GPIO12 | `I2S_LRC` |
+| Mic DOUT (`audio = 1` only) | GPIO39 | `I2S_DIN`. Input-only pin |
+| Mic 3V / GND (`audio = 1` only) | 3V3 / GND | |
+| Mic SEL (`audio = 1` only) | leave unconnected | |
+
+Camera, camera boost converter and microphone are as on the V4-R8 ([Remote node wiring](#remote-node-wiring), [Power](#power)): `CAMERA_ONOFF` (GPIO22) is a HIGH-on logic signal driving the boost converter's enable pin. The camera UART and I2S pins match the original V2 build; only the camera switch moved (see below). ESP32 pins are 3.3 V only.
+
+### V2 base station wiring
+
+| SD breakout pin | V2 pin | Define in `lib/Board/HeltecV2.h` |
+|---|---|---|
+| GND | GND | |
+| 3V / VCC | 3V3 | |
+| CS | GPIO23 | `SD_CS` |
+| SCK / CLK | GPIO22 | `SD_SCK` |
+| MISO / DO | GPIO33 | `SD_MISO` |
+| MOSI / DI | GPIO17 | `SD_MOSI` |
+
+Power the breakout from **3V3**. The OLED (`display_v2 = 1`, default) uses GPIO4/15/16 plus Vext (GPIO21).
+
+### V2 motion sensor (PIR)
+
+- **Output on GPIO32**, an RTC GPIO with an internal pull-down, so it can wake the ESP32 from deep sleep: wake on HIGH (ext1). The pull-down means an unplugged sensor doesn't wake the board.
+- **Power it from `3V3`.**
+- On the V2 the microphone and the PIR do **not** share a pin, but `audio = 1` still needs `motion = 0` (firmware rule).
+- Warm-up, retriggering, delay and field of view: as for the V4-R8 ([Motion sensor](#motion-sensor-pir)).
+
+### V2 strapping pins
+
+- **GPIO12** (mic LRCL / WS) is a strapping pin (MTDI, selects the flash voltage): nothing may pull it HIGH at reset. With `audio = 1`, check that the microphone doesn't drive it HIGH while the board resets.
+- **GPIO2** is also a strapping pin, so the camera power switch is on **GPIO22**, not GPIO2 as in the original V2 build: a boost-converter EN pulled up on GPIO2 would block flashing.
+
+### V2 radio
+
+| Item | V2 |
+|---|---|
+| Chip | SX1276, PA_BOOST, no front end, no TCXO setting |
+| TX power (`LORA_TX_POWER_DBM`) | 17 dBm: the PA_BOOST maximum for continuous use. 20 dBm is rated only for 1 % duty cycle, which picture transfers exceed. The original V2 build used 20 dBm |
+| Over-current limit (`LORA_CURRENT_LIMIT_MA`) | 100 mA. RadioLib's 60 mA default would clip 17 dBm (~90 mA) |
+| Link settings | Same as the V4-R8: 915 MHz, 250 kHz, SF7, CR 5 (`lib/Board/Board.h`, see [configuration.md](configuration.md#radio-link)) |
+
+A V2 transmits about 3 dB less than a V4-R8 at its default (~20 dBm at the antenna).
+
+### V2 without PSRAM
+
+- **Transfer buffer: `MAX_TRANSFER_BUFFER` = 72000 bytes (288 packets of 250)**, against 125000 on the V4-R8. With the V4-R8's size the V2 local node overflowed DRAM by 48800 B at build time.
+- **Remote:** the camera JPEG is read straight into the transfer buffer and sent unchanged. `jpeg_quality` and `night_grayscale` are ignored (boot log: `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`). Re-encoding needs a full-frame pixel buffer (640×480×3 ≈ 920 KB) that only fits in PSRAM.
+- **Pictures over 72000 bytes** are dropped with `Can't read a N-byte frame into the 72000-byte camera buffer`. To shrink camera JPEGs, raise `camera_compression` (camera-side).
+- **Local:** a V2 local node works with V4-R8 remotes (re-encoded pictures are 10–20 KB) and V2 remotes. If an announced picture needs more packets than fit the local buffer (V4-R8 remote at 125000 bytes to a V2 local at 72000), the local node logs `N packets don't fit this board's M-byte buffer; skipped`, requests nothing and, with `motion = 1`, still sends "done" (F9 FA) so the remote sleeps.
+
+### V2 power
+
+- The V2 has a LiPo connector (JST 1.25) with charger but **no solar input** (a V4 feature). A solar panel needs an external charge controller.
+- The [Power](#power) section and the battery sizing above are for the V4-R8 and **do not apply** to the V2: it has a CP2102 and an older regulator. The V2's deep-sleep current has **not been measured**; don't assume the V4-R8 figures.
+- With `motion = 1` the V2 remote holds `CAMERA_ONOFF` (GPIO22) LOW, the SX1276 NSS (GPIO18) HIGH and Vext off through deep sleep.

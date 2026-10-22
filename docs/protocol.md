@@ -1,6 +1,6 @@
 # LoRa transfer protocol
 
-All packets are raw LoRa frames: explicit header, 2-byte CRC, sync word `0x12`. The radio settings are in [configuration.md](configuration.md#radio-link-libheltecv4r8heltecv4r8h). Multi-byte numbers are **little-endian** `uint16`, packed by `u0()`/`u1()` and unpacked by `u()` in `lib/HeltecV4R8/HeltecV4R8.h`.
+All packets are raw LoRa frames: explicit header, 2-byte CRC, sync word `0x12`. The radio settings are in [configuration.md](configuration.md#radio-link). Multi-byte numbers are **little-endian** `uint16`, packed by `u0()`/`u1()` and unpacked by `u()` in `lib/Board/Board.h`. The Heltec V4-R8 (SX1262) and the Heltec V2 (SX1276) use the same on-air format and sync word, so nodes on either board interoperate. Mixed pairs have not been tested on hardware.
 
 ## Packet types
 
@@ -31,7 +31,7 @@ sequenceDiagram
     loop i = 0 .. n-1
         L->>R: F9 FE i
         R->>L: i + payload[i*250 ..] (after a 5 ms turnaround guard)
-        Note over L: append to transfer_buffer,<br/>log i / n and RSSI (and on the OLED with display = 1)
+        Note over L: append to transfer_buffer,<br/>log i / n and RSSI (and on the OLED with the display on)
     end
     L->>S: HTTP PUT /image.jpg or /audio.raw
     Note over L: audio = 1: switch picture ↔ audio
@@ -84,10 +84,12 @@ Filtering on the local node while waiting for data:
 
 - 4-byte frames starting with `F9`, i.e. the repeated RFT responses, are discarded as "magic packet".
 - Frames whose index doesn't match the requested one are discarded as "Mismatched packet". The same request is resent on the next attempt.
-- Frames shorter than 2 bytes or longer than 252, and frames that would overflow the 125 KB receive buffer, are discarded as "Malformed packet".
+- Frames shorter than 2 bytes or longer than 252, and frames that would overflow the receive buffer (`MAX_TRANSFER_BUFFER`: 125000 bytes on the V4-R8, 72000 on the V2), are discarded as "Malformed packet".
 - Frames with a bad CRC are dropped by the radio layer (`LoRa receive error: -7`).
 
 The remote node is stateless between requests. It serves any packet index from its last capture, so a lost packet only costs a re-request. Requests for an index past the end of the capture are ignored.
+
+**Announcement larger than the local buffer.** When the local node receives the RFT response or announcement, it checks `n × 250` against its own `MAX_TRANSFER_BUFFER`. If the picture doesn't fit (for example a V4-R8 remote, 125000 bytes, talking to a V2 local node, 72000 bytes), it logs `N packets don't fit this board's M-byte buffer; skipped` and requests no packets. With `motion = 1` it still sends "done" (`F9 FA`), so the remote goes to sleep.
 
 ## Edge cases
 
@@ -113,4 +115,4 @@ One data packet takes:
 
 That puts a 48 KB camera JPEG at about 46 s, a 20 KB re-encoded one at about 19 s, and 5 s of audio (≈ 110 KB) at about 1.8 min. These are calculated estimates, not measurements. The data packet's airtime is now about 83% of the cycle. Further speed has to come from fewer bytes (re-encoding, resolution) or radio settings (bandwidth, SF).
 
-Earlier versions waited a fixed 100 ms before every request and again before every reply (~0.45 s per packet). Those delays were inherited from the original Heltec V2 code and have been removed. `radioSend()` puts the SX1262 back into receive mode as soon as each transmission ends. The remote's 5 ms guard covers that turnaround, and the one-time wait after the RFT response keeps the first request from colliding with the remote's repeated replies. The shorter timing hasn't been tested on hardware yet.
+Earlier versions waited a fixed 100 ms before every request and again before every reply (~0.45 s per packet). Those delays were inherited from the original Heltec V2 code and have been removed. `radioSend()` puts the radio back into receive mode as soon as each transmission ends. The remote's 5 ms guard covers that turnaround, and the one-time wait after the RFT response keeps the first request from colliding with the remote's repeated replies. The shorter timing hasn't been tested on hardware yet.

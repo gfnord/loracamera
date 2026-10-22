@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Adafruit_VC0706.h>
-#include <HeltecV4R8.h>
+#include <Board.h>
+#include <Display.h>
 #include "reencode.h"
 #if LORACAMERA_AUDIO
 #include "driver/i2s.h"
@@ -28,19 +29,16 @@ static_assert(LORACAMERA_NIGHT_GRAYSCALE == 0 || LORACAMERA_NIGHT_GRAYSCALE == 1
 static_assert(LORACAMERA_NIGHT_MAX_CHROMA >= 0 && LORACAMERA_NIGHT_MAX_CHROMA <= 255,
 	"night_max_chroma must be 0-255");
 
+#ifdef BOARD_HAS_PSRAM
 // The camera's JPEG is read into PSRAM first, then re-encoded (or copied) into transfer_buffer.
 #define CAMERA_JPEG_MAX (256 * 1024)
-
-// Pins (free GPIOs on the V4-R8 headers)
-#define CAMERATX_BOARDRX 47
-#define CAMERARX_BOARDTX 48
-#define CAMERA_ONOFF 41
-
-#if LORACAMERA_MOTION
-// PIR sensor output, HIGH = motion. Must be an RTC GPIO (0-21) to wake the chip from deep sleep.
-#define MOTION_PIR 6
-static_assert(MOTION_PIR <= 21, "MOTION_PIR must be an RTC GPIO (0-21)");
+#else
+// No PSRAM (Heltec V2): the camera's JPEG is read straight into transfer_buffer and sent
+// unchanged; re-encoding needs a full-frame pixel buffer that only fits in PSRAM.
+#define CAMERA_JPEG_MAX MAX_TRANSFER_BUFFER
 #endif
+
+// Camera, PIR and microphone pins are in the board header (lib/Board/<board>.h).
 
 // The VC0706 always starts at this speed: the baud change below is not saved on the camera.
 #define CAMERA_DEFAULT_BAUD 38400
@@ -60,10 +58,6 @@ static_assert(LORACAMERA_CAMERA_COMPRESSION >= 0 && LORACAMERA_CAMERA_COMPRESSIO
 #define AUDIO_SECONDS 5
 #define GAIN_FACTOR 2 
 #define AUDIO_FRAME_SIZE 1024
-
-#define I2S_BCK 4
-#define I2S_LRC 3
-#define I2S_DIN 6 // DOUT from I2S mic
 #endif
 
 Adafruit_VC0706 * cam;
@@ -72,7 +66,7 @@ uint8_t transfer_buffer[MAX_TRANSFER_BUFFER];
 uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet number header
 
 uint32_t content_length = 0;
-uint8_t *camera_jpeg = nullptr; // CAMERA_JPEG_MAX bytes in PSRAM: the JPEG as read from the camera
+uint8_t *camera_jpeg = nullptr; // CAMERA_JPEG_MAX bytes: the JPEG as read from the camera
 
 
 #if LORACAMERA_AUDIO
@@ -116,10 +110,10 @@ void read_audio(void) {
 	int32_t small_buf[AUDIO_FRAME_SIZE/4];
 	i2s_read((i2s_port_t)I2S_NUM_0, small_buf, AUDIO_FRAME_SIZE, &bytes_read, portMAX_DELAY );
 	for(uint32_t i=0;i<(bytes_read/4);i++) { 
+		if(audio_pointer + 2 > MAX_TRANSFER_BUFFER) return; // full: drop the rest
 		int16_t sample = (int16_t) (small_buf[i] >> (12-GAIN_FACTOR));
 		transfer_buffer[audio_pointer++] = (sample & 0xFF);
 		transfer_buffer[audio_pointer++] = (sample >> 8);
-		if(audio_pointer-1 == MAX_TRANSFER_BUFFER) audio_pointer = 0;
 	}
 }
 #endif
@@ -182,8 +176,11 @@ void setup() {
 	setup_i2s();
 #endif
 	vextOn();
+	displayBegin();
+	displayShow("Remote node", "Starting LoRa...");
 	if(!radioBegin()) {
 		Serial.printf("Starting LoRa failed!\n");
+		displayShow("Remote node", "Starting LoRa failed!");
 		while(1) delay(1000);
 	}
 
@@ -194,11 +191,23 @@ void setup() {
 #endif
 	Serial1.begin(CAMERA_DEFAULT_BAUD,SERIAL_8N1, CAMERATX_BOARDRX, CAMERARX_BOARDTX);
 	cam = new Adafruit_VC0706(&Serial1);
+#ifdef BOARD_HAS_PSRAM
 	camera_jpeg = (uint8_t *)ps_malloc(CAMERA_JPEG_MAX);
 	if(!camera_jpeg) Serial.printf("No PSRAM for the camera buffer; pictures are disabled\n");
+#else
+	camera_jpeg = transfer_buffer;
+#if LORACAMERA_JPEG_QUALITY > 0
+	Serial.printf("No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged\n");
+#endif
+#endif
 
 
 	Serial.printf("I have %d free heap\n", ESP.getFreeHeap());
+#if LORACAMERA_MOTION
+	displayShow("Remote node", "LoRa OK", "Sleeps until motion");
+#else
+	displayShow("Remote node", "LoRa OK", "Waiting for requests");
+#endif
 }
 
 // Debug time taken to do things 
@@ -211,10 +220,16 @@ void print_time(const char * title, uint32_t length, long time) {
 #if LORACAMERA_AUDIO
 void recordAudio() {
 	Serial.printf("Recording %d seconds of audio\n", AUDIO_SECONDS);
+	displayShow("Recording audio");
 	long start_time = millis();
 	audio_pointer = 0;
 	while(millis() - start_time < (AUDIO_SECONDS*1000)) {
 		read_audio();
+		// 5 s fit the V4-R8's buffer; the V2's holds ~3.2 s.
+		if(audio_pointer + 2 > MAX_TRANSFER_BUFFER) {
+			Serial.printf("Audio buffer full (%u bytes), clip cut short\n", MAX_TRANSFER_BUFFER);
+			break;
+		}
 	}
 	content_length = audio_pointer;
 	print_time("microphone", content_length, start_time);
@@ -224,7 +239,7 @@ void recordAudio() {
 // Move the camera's JPEG (camera_jpeg, jpglen bytes) into transfer_buffer and set
 // content_length, re-encoding it first when jpeg_quality is set.
 void prepareImage(uint32_t jpglen) {
-#if LORACAMERA_JPEG_QUALITY > 0
+#if LORACAMERA_JPEG_QUALITY > 0 && defined(BOARD_HAS_PSRAM)
 	long start = millis();
 	ReencodeResult r;
 	bool ok = reencodeJpeg(camera_jpeg, jpglen, transfer_buffer, MAX_TRANSFER_BUFFER,
@@ -246,7 +261,7 @@ void prepareImage(uint32_t jpglen) {
 		content_length = 0;
 		return;
 	}
-	memcpy(transfer_buffer, camera_jpeg, jpglen);
+	if(camera_jpeg != transfer_buffer) memcpy(transfer_buffer, camera_jpeg, jpglen);
 	content_length = jpglen;
 }
 
@@ -254,6 +269,7 @@ void prepareImage(uint32_t jpglen) {
 void takePicture() {
 	uint32_t jpglen = 0;
 	content_length = 0;
+	displayShow("Taking picture...");
 	turnOnCamera();
 	Serial.printf("Taking pic\n");
 	// Restart the camera
@@ -293,6 +309,10 @@ void takePicture() {
 	turnOffCamera();
 	// Re-encode with the camera already off.
 	if(jpglen) prepareImage(jpglen);
+	char size_line[32];
+	snprintf(size_line, sizeof(size_line), "%u bytes", content_length);
+	displayShow(content_length ? "Picture ready" : "No picture",
+		content_length ? size_line : "check camera / serial log");
 }
 
 
@@ -303,8 +323,27 @@ uint16_t packetCount() {
 	return packets;
 }
 
+// Packet progress and the RSSI of the request on the status screen. Redrawn at most every
+// 250 ms (and for the last packet): drawing takes I2C time the next request waits through.
+void showSending(uint16_t packet) {
+#if LORACAMERA_DISPLAY
+	static uint32_t last_draw = 0;
+	uint16_t packets = packetCount();
+	if(packet + 1 < packets && millis() - last_draw < 250) return;
+	last_draw = millis();
+	char progress[24];
+	char rssi_line[24];
+	snprintf(progress, sizeof(progress), "%u / %u", packet + 1, packets);
+	snprintf(rssi_line, sizeof(rssi_line), "rssi: %d", radioLastRssi());
+	displayShow("Sending", progress, rssi_line);
+#endif
+}
+
 // Tell the local node how many data packets to request: F9 C2 nL nH, sent repeatedly.
 void announce(uint16_t packets) {
+	char line[24];
+	snprintf(line, sizeof(line), "%u packets", packets);
+	displayShow("Announcing", line);
 	lora_buffer[0] = 0xF9;
 	lora_buffer[1] = 0xC2;
 	lora_buffer[2] = u0(packets);
@@ -340,6 +379,7 @@ bool servePacketRequest(const uint8_t *request, size_t packetSize) {
 	delay(5); // turnaround guard: the requester needs ~1 ms to get back into receive mode
 	radioSend(lora_buffer, bytes_to_send+2);
 	delay(20);
+	showSending(cd);
 	return true;
 }
 
@@ -364,6 +404,7 @@ void pushPicture() {
 			last = millis();
 		} else if(packetSize == 2 && request[0] == 0xF9 && request[1] == 0xFA) {
 			Serial.printf("Transfer done\n");
+			displayShow("Transfer done");
 			return;
 		} else if(requested) {
 			if(millis() - last > MOTION_SERVE_IDLE_MS) {
@@ -373,6 +414,7 @@ void pushPicture() {
 		} else if(announcements == 0 || millis() - last > MOTION_ANNOUNCE_GAP_MS) {
 			if(announcements == MOTION_ANNOUNCE_TRIES) {
 				Serial.printf("The local node never answered; picture dropped\n");
+				displayShow("No answer from", "the base station");
 				return;
 			}
 			Serial.printf("Announcing %u bytes in %d packets\n", content_length, packets);
@@ -390,9 +432,9 @@ void sleepUntilMotion() {
 	radioSleep();
 	Serial1.end(); // don't drive the camera's RX line while it's unpowered
 	vextOff();
-	// GPIO41 would float in deep sleep, and the boost converter's EN may be pulled up:
-	// hold it LOW. Digital pads (22+) also need the deep-sleep hold, which latches all of
-	// them (Vext stays off).
+	// The camera switch pin would float in deep sleep, and the boost converter's EN may be
+	// pulled up: hold it LOW. Digital pads also need the deep-sleep hold, which latches all
+	// of them (Vext stays off, the radio stays deselected).
 	digitalWrite(CAMERA_ONOFF, LOW);
 	gpio_hold_en((gpio_num_t)CAMERA_ONOFF);
 	gpio_deep_sleep_hold_en();
@@ -411,6 +453,7 @@ void sleepUntilMotion() {
 void loop() {
 	if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
 		Serial.printf("Motion detected\n");
+		displayShow("Motion detected");
 		pushPicture();
 	}
 	// After power-on or reset, just arm the PIR: pictures are taken on motion only.

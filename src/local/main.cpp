@@ -1,15 +1,10 @@
 #include <Arduino.h>
-#include <HeltecV4R8.h>
-#ifndef LORACAMERA_DISPLAY
-#define LORACAMERA_DISPLAY 0
-#endif
+#include <Board.h>
+#include <Display.h>
 #ifndef LORACAMERA_SDCARD
 #define LORACAMERA_SDCARD 0
 #endif
 static_assert(LORACAMERA_SDCARD == 0 || LORACAMERA_SDCARD == 1, "sdcard must be 0 or 1");
-#if LORACAMERA_DISPLAY
-#include <SSD1306Wire.h>
-#endif
 #if LORACAMERA_SDCARD
 #include "storage.h"
 #endif
@@ -43,10 +38,6 @@ long lastCheckTime = 0;
 #endif
 uint8_t content_type = PICTURE;
 
-#if LORACAMERA_DISPLAY
-SSD1306Wire display(0x3c, PIN_OLED_SDA, PIN_OLED_SCL, GEOMETRY_128_64);
-#endif
-
 // TODO -- bank this so that we can have more room
 uint8_t transfer_buffer[MAX_TRANSFER_BUFFER];
 uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet number header
@@ -56,25 +47,20 @@ uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet num
 void setup() { 
 	Serial.begin(115200);
 	vextOn();
-#if LORACAMERA_DISPLAY
-	oledReset();
-	display.init();
-	display.flipScreenVertically();  
-	display.setFont(ArialMT_Plain_10);
-#endif
+	displayBegin();
+	displayShow("Base station", "Starting LoRa...");
 
 	if(!radioBegin()) {
 		Serial.printf("Starting LoRa failed!\n");
-#if LORACAMERA_DISPLAY
-		display.clear();
-		display.drawString(0, 0, "Starting LoRa failed!");
-		display.display();
-#endif
+		displayShow("Base station", "Starting LoRa failed!");
 		while(1) delay(1000);
 	}
 
+	displayShow("Base station", "LoRa OK", "Connecting to Wi-Fi...");
 #if LORACAMERA_SDCARD
-	storageBegin();
+	const char *sd_line = storageBegin() ? "SD card OK" : "SD card not found";
+#else
+	const char *sd_line = nullptr;
 #endif
 
 	// Wi-Fi is needed only for uploads: don't wait forever, so pictures still reach
@@ -85,10 +71,13 @@ void setup() {
 	while(WiFi.status() != WL_CONNECTED && millis() - wifi_start < WIFI_CONNECT_TIMEOUT_MS) {
 		delay(500);
 	}
+	char wifi_line[40];
 	if(WiFi.status() == WL_CONNECTED) {
 		Serial.printf("Wi-Fi connected, IP %s\n", WiFi.localIP().toString().c_str());
+		snprintf(wifi_line, sizeof(wifi_line), "Wi-Fi %s", WiFi.localIP().toString().c_str());
 	} else {
 		Serial.printf("Wi-Fi not connected yet; continuing, uploads wait for it\n");
+		snprintf(wifi_line, sizeof(wifi_line), "Wi-Fi not connected");
 	}
 	// UTC from NTP once Wi-Fi is up; sets the SD card's file timestamps.
 	configTime(0, 0, "pool.ntp.org");
@@ -96,9 +85,10 @@ void setup() {
 
 	Serial.printf("I have %d free heap\n", ESP.getFreeHeap());
 
-#if LORACAMERA_DISPLAY
-	display.clear();
-	display.display();
+#if LORACAMERA_MOTION
+	displayShow("Base station ready", wifi_line, sd_line, "Waiting for motion");
+#else
+	displayShow("Base station ready", wifi_line, sd_line, "Polling the remote");
 #endif
 }
 
@@ -109,10 +99,11 @@ void print_time(const char * title, uint32_t length, long time) {
 }
 
 
-void put_to_server(uint8_t * buf, uint32_t length) {
+// Upload buf to SERVER_URL. Returns a short result for the status screen.
+const char *put_to_server(uint8_t * buf, uint32_t length) {
 	if(WiFi.status() != WL_CONNECTED) {
 		Serial.printf("Wi-Fi not connected, upload skipped\n");
-		return;
+		return "Upload skipped: no Wi-Fi";
 	}
 	char put_url[255];
 	HTTPClient http;
@@ -133,10 +124,12 @@ void put_to_server(uint8_t * buf, uint32_t length) {
 	http.addHeader("Content-Length", String(length));
 	int code = http.PUT(buf,length); 
 	http.end();
+	print_time("server", length, time);
 	if(code < 200 || code >= 300) {
 		Serial.printf("Upload failed: %s\n", code < 0 ? http.errorToString(code).c_str() : String(code).c_str());
+		return "Upload failed";
 	}
-	print_time("server", length, time);
+	return "Uploaded";
 }
 
 // request a particular packet
@@ -158,6 +151,9 @@ uint16_t request_transmission() {
 		lora_buffer[0] = 0xF9;
 		lora_buffer[1] = 0xFC + content_type;
 		Serial.printf("Sending request for transmission of type %d...\n", content_type);
+		char attempt[24];
+		snprintf(attempt, sizeof(attempt), "attempt %d", REQUEST_TIMER - request_timer);
+		displayShow("Requesting", content_type == AUDIO ? "audio" : "picture", attempt);
 		radioSend(lora_buffer, 2);
 
 		// Wait for either audio or picture to capture
@@ -185,23 +181,23 @@ void update_status(uint16_t packet_number, uint16_t packets, int rssi) {
 	char rssi_line[32];
 	sprintf(progress, "%d / %d [%2.2f%%]", 
 		packet_number, packets, ((float)packet_number/packets)*100.0f);
-	sprintf(rssi_line, " rssi: %d\n", rssi);
-	Serial.print(progress);
-	Serial.print(rssi_line);
-
-#if LORACAMERA_DISPLAY
-	display.clear();
-	display.setFont(ArialMT_Plain_10);
-	display.drawString(0, 0, progress);
-	display.drawString(0, 15, rssi_line);
-	display.display();
-#endif
+	sprintf(rssi_line, "rssi: %d", rssi);
+	Serial.printf("%s %s\n", progress, rssi_line);
+	displayShow("Receiving", progress, rssi_line);
 }
 
 void handle_packets(uint16_t packets) {
 	uint32_t read_pointer = 0;
 	long time = millis();
 	Serial.printf("Got back %d packets from the rft\n", packets);
+	const char *skipped = nullptr; // why nothing was requested, for the status screen
+	// A remote on another board may have a bigger buffer than this one.
+	if((uint32_t)packets * LORA_TRANSFER_BUFFER > MAX_TRANSFER_BUFFER) {
+		Serial.printf("%d packets don't fit this board's %u-byte buffer; skipped\n",
+			packets, MAX_TRANSFER_BUFFER);
+		skipped = "Too big for this board";
+		packets = 0; // request nothing; in motion mode the remote still gets "done"
+	}
 	// The remote repeats its RFT response; wait until it's done before the first request,
 	// or that request is sent while the remote is still transmitting and gets lost.
 	delay(RFT_RESPONSE_REPEAT * (radioTimeOnAirMs(4) + RFT_RESPONSE_GAP_MS));
@@ -268,11 +264,20 @@ void handle_packets(uint16_t packets) {
 #endif
 	Serial.printf("Loaded all packets, total %d\n", read_pointer);
 	print_time("lora", read_pointer, time);
-	if(read_pointer == 0) return;
+	char received[40];
+	snprintf(received, sizeof(received), "%u bytes in %lu s", read_pointer, (millis() - time) / 1000);
+	if(read_pointer == 0) {
+		displayShow("Nothing received", received, skipped);
+		return;
+	}
+	displayShow("Received", received, "Saving...");
 #if LORACAMERA_SDCARD
-	storageSave(transfer_buffer, read_pointer, content_type == AUDIO ? "raw" : "jpg");
+	const char *sd_line = storageSave(transfer_buffer, read_pointer, content_type == AUDIO ? "raw" : "jpg")
+		? "Saved to SD card" : "SD card save failed";
+#else
+	const char *sd_line = nullptr;
 #endif
-	put_to_server(transfer_buffer, read_pointer);
+	displayShow("Received", received, sd_line, put_to_server(transfer_buffer, read_pointer));
 }
 
 

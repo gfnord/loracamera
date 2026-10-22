@@ -4,13 +4,14 @@ loracamera sends JPEG frames from a serial camera over a point-to-point 915 MHz 
 
 ```mermaid
 flowchart LR
-    subgraph Field["Remote node (Heltec V4-R8)"]
-        PIR[PIR motion sensor] -->|wake-up, GPIO6| R
+    subgraph Field["Remote node (Heltec V4-R8 or V2)"]
+        PIR[PIR motion sensor] -->|wake-up, GPIO6 / GPIO32 on V2| R
         CAM[VC0706 camera] -->|UART| R[src/remote]
         MIC[I2S MEMS mic, optional] -.->|I2S| R
+        R -.->|display| ROLED[OLED status, optional]
     end
-    subgraph Base["Local node (Heltec V4-R8)"]
-        L[src/local] -.->|display = 1| OLED[OLED progress, optional]
+    subgraph Base["Local node (Heltec V4-R8 or V2)"]
+        L -.->|display| OLED[OLED status, optional]
         L -->|sdcard = 1| SD[(microSD: /loracam/NNNNNN.jpg)]
     end
     R <-->|LoRa 915 MHz| L
@@ -24,7 +25,7 @@ With `motion = 1` (the default) the remote node spends its time in deep sleep. W
 
 | Document | What it covers |
 |---|---|
-| [hardware.md](hardware.md) | Bill of materials, V4-R8 pin map, RF front end, wiring of both nodes, power and solar sizing |
+| [hardware.md](hardware.md) | Bill of materials, V4-R8 pin map, RF front end, wiring of both nodes, power and solar sizing, [Heltec V2](hardware.md#heltec-v2) pin map and wiring |
 | [getting-started.md](getting-started.md) | Install the toolchain, configure, build, flash, monitor (including WSL2) |
 | [configuration.md](configuration.md) | Every tunable: `[loracamera]` options (motion detection, audio, OLED, SD card, camera speed and compression, image re-encoding and night grayscale), radio, TX power, timing, pins, server URL; adding new payload types |
 | [usage.md](usage.md) | Running the upload server, deploying the nodes, what you see, the SD card and server files, converting the output |
@@ -34,13 +35,14 @@ With `motion = 1` (the default) the remote node spends its time in deep sleep. W
 ## Repository layout
 
 ```
-platformio.ini            build environments: local, remote
+platformio.ini            build environments: local, remote (V4-R8); local_v2, remote_v2 (Heltec V2)
 src/local/main.cpp        base station: receives (or requests) data, saves it, uploads it
 src/local/storage.*       microSD card on the base station (sdcard = 1)
 src/local/auth.h          your Wi-Fi credentials (not committed, you create it)
 src/remote/main.cpp       field side: PIR wake-up and deep sleep, camera (+ optional microphone) capture, serves packets
 src/remote/reencode.*     JPEG re-encoding on the ESP32-S3 (quality, night grayscale)
-lib/HeltecV4R8/           board pins, Vext/OLED, KCT8103L front end, SX1262 radio and its sleep, shared link settings
+lib/Board/                Board.h (shared link settings, selects the board header) + per-board HeltecV4R8.*, HeltecV2.* (pins, Vext/OLED, radio and its sleep; KCT8103L front end on the V4-R8)
+lib/Display/              OLED status screen for both nodes (display / display_v2)
 lib/VC0706/               Adafruit VC0706 camera library, slowed down for the ESP32, 32-bit read offset
 server/listen.py          HTTP PUT receiver that saves uploads to disk
 ```
@@ -48,3 +50,5 @@ server/listen.py          HTTP PUT receiver that saves uploads to disk
 ## Status
 
 The firmware targets the Heltec WiFi LoRa 32 **V4-R8** (HTIT-WBR8H) and builds with PlatformIO. It was ported from the original Heltec V2 / ESP-IDF version. With `motion = 0` the request/packet protocol is unchanged from it, but the per-packet delays were shortened and the picture is now re-encoded before sending; `motion = 1` adds the PIR wake-up, deep sleep and the remote-initiated announcement. None of the V4-R8 build has been tested on hardware yet; the motion mode's transfer logic was only exercised in a host simulation of both nodes. Use the bring-up checklist in [troubleshooting.md](troubleshooting.md) for the first run.
+
+The **Heltec WiFi LoRa 32 V2** (ESP32 + SX1276) is also supported, as either node, in the `local_v2` / `remote_v2` environments, and V2 and V4-R8 boards can be mixed. It has no PSRAM, so a V2 remote does no re-encoding (`jpeg_quality` and `night_grayscale` are ignored; the camera JPEG is sent as is) and its picture buffer is 72000 bytes instead of 125000. The V2 build compiles but has not been tested on hardware, nor have mixed pairs. Wiring and power: [hardware.md](hardware.md#heltec-v2).

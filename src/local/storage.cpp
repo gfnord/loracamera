@@ -2,15 +2,13 @@
 #if defined(LORACAMERA_SDCARD) && LORACAMERA_SDCARD
 #include "storage.h"
 
+#include <Board.h>
+
 #include <SD.h>
 #include <SPI.h>
 
 // microSD breakout on its own SPI bus (HSPI); the LoRa radio owns the default SPI bus.
-// Free GPIOs on header J3 of the V4-R8 (also on the GNSS connector: leave that empty).
-#define SD_CS 4    // J3 pin 15
-#define SD_SCK 39  // J3 pin 10
-#define SD_MISO 38 // J3 pin 11
-#define SD_MOSI 41 // J3 pin 8
+// SD_CS/SCK/MISO/MOSI are in the board header (lib/Board/<board>.h).
 #define SD_SPI_HZ 4000000
 
 static const char *DIR_NAME = "/loracam";

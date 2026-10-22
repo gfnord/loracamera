@@ -53,6 +53,17 @@ static_assert(LORACAMERA_CAMERA_BAUD == 38400 || LORACAMERA_CAMERA_BAUD == 11520
 static_assert(LORACAMERA_CAMERA_COMPRESSION >= 0 && LORACAMERA_CAMERA_COMPRESSION <= 255,
 	"camera_compression must be 0-255");
 
+// Built-in test picture instead of the camera, set by `test_image` in [loracamera].
+#ifndef LORACAMERA_TEST_IMAGE
+#define LORACAMERA_TEST_IMAGE 0
+#endif
+static_assert(LORACAMERA_TEST_IMAGE == 0 || LORACAMERA_TEST_IMAGE == 1, "test_image must be 0 or 1");
+#if LORACAMERA_TEST_IMAGE
+#include "test_image.h"
+static_assert(sizeof(TEST_JPEG) <= CAMERA_JPEG_MAX && sizeof(TEST_JPEG) <= MAX_TRANSFER_BUFFER,
+	"the test JPEG must fit the camera and transfer buffers");
+#endif
+
 #if LORACAMERA_AUDIO
 #define SAMPLE_RATE 11025
 #define AUDIO_SECONDS 5
@@ -267,8 +278,18 @@ void prepareImage(uint32_t jpglen) {
 
 // Take a picture and load it into transfer_buffer
 void takePicture() {
-	uint32_t jpglen = 0;
 	content_length = 0;
+#if LORACAMERA_TEST_IMAGE
+	// No camera: the test JPEG goes through the same path as a camera frame.
+	displayShow("Test image...");
+	Serial.printf("test_image = 1: using the built-in %u-byte test JPEG, camera not used\n",
+		(unsigned)sizeof(TEST_JPEG));
+	if(camera_jpeg) {
+		memcpy(camera_jpeg, TEST_JPEG, sizeof(TEST_JPEG));
+		prepareImage(sizeof(TEST_JPEG));
+	}
+#else
+	uint32_t jpglen = 0;
 	displayShow("Taking picture...");
 	turnOnCamera();
 	Serial.printf("Taking pic\n");
@@ -309,6 +330,7 @@ void takePicture() {
 	turnOffCamera();
 	// Re-encode with the camera already off.
 	if(jpglen) prepareImage(jpglen);
+#endif
 	char size_line[32];
 	snprintf(size_line, sizeof(size_line), "%u bytes", content_length);
 	displayShow(content_length ? "Picture ready" : "No picture",

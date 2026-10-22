@@ -57,6 +57,9 @@ src/local/auth.h
 *.jpg
 audio.raw
 *.raw
+server/target/
+server/captures/
+server/.env
 
 
 

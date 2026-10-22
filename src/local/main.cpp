@@ -12,9 +12,14 @@ static_assert(LORACAMERA_SDCARD == 0 || LORACAMERA_SDCARD == 1, "sdcard must be 
 #include <HTTPClient.h>
 #include <time.h>
 
-// Wifi details & server for uploads
-#define SERVER_URL "http://192.168.0.150:8000"
+// Wi-Fi credentials, upload server and its bearer token: all in auth.h (not committed).
 #include "auth.h"
+#ifndef SERVER_URL
+#error "Define SERVER_URL in src/local/auth.h, e.g. http://loracam.example.com (no trailing slash)"
+#endif
+#ifndef UPLOAD_TOKEN
+#error "Define UPLOAD_TOKEN in src/local/auth.h: the server's UPLOAD_TOKEN"
+#endif
 const char * ssid = WIFI_SSID ;
 const char * password = WIFI_PASS ;
 
@@ -23,7 +28,13 @@ const char * password = WIFI_PASS ;
 // How long setup() waits for Wi-Fi before starting without it (it keeps reconnecting).
 #define WIFI_CONNECT_TIMEOUT_MS 20000
 #if !LORACAMERA_MOTION
-#define CHECK_EVERY_MS 10000
+// Seconds between requests, set by `poll_interval` in the [loracamera] section of platformio.ini.
+#ifndef LORACAMERA_POLL_INTERVAL
+#define LORACAMERA_POLL_INTERVAL 10
+#endif
+static_assert(LORACAMERA_POLL_INTERVAL >= 0 && LORACAMERA_POLL_INTERVAL <= 86400,
+	"poll_interval must be 0-86400 seconds");
+#define CHECK_EVERY_MS (LORACAMERA_POLL_INTERVAL * 1000UL)
 // The max the remote device will take to acquire image / audio
 #define MAX_RFT_RESPONSE_MS 30000
 #endif
@@ -76,8 +87,13 @@ void setup() {
 		Serial.printf("Wi-Fi connected, IP %s\n", WiFi.localIP().toString().c_str());
 		snprintf(wifi_line, sizeof(wifi_line), "Wi-Fi %s", WiFi.localIP().toString().c_str());
 	} else {
-		Serial.printf("Wi-Fi not connected yet; continuing, uploads wait for it\n");
-		snprintf(wifi_line, sizeof(wifi_line), "Wi-Fi not connected");
+		wl_status_t st = WiFi.status();
+		const char *why = st == WL_NO_SSID_AVAIL ? "SSID not found (2.4 GHz only)"
+			: st == WL_CONNECT_FAILED ? "connect failed (password?)"
+			: "no connection";
+		Serial.printf("Wi-Fi not connected yet to \"%s\": %s (status %d); continuing, uploads wait for it\n",
+			ssid, why, st);
+		snprintf(wifi_line, sizeof(wifi_line), "Wi-Fi: %s", st == WL_NO_SSID_AVAIL ? "SSID not found" : "not connected");
 	}
 	// UTC from NTP once Wi-Fi is up; sets the SD card's file timestamps.
 	configTime(0, 0, "pool.ntp.org");
@@ -121,6 +137,7 @@ const char *put_to_server(uint8_t * buf, uint32_t length) {
 		http.begin(put_url);
 		http.addHeader("Content-Type", "image/jpg");		
 	}
+	http.addHeader("Authorization", "Bearer " UPLOAD_TOKEN);
 	http.addHeader("Content-Length", String(length));
 	int code = http.PUT(buf,length); 
 	http.end();

@@ -36,7 +36,7 @@ Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base sta
 | 1 | microSD card, FAT32 | SDHC up to 32 GB comes FAT32. The firmware can't read exFAT, so reformat 64 GB+ cards (SDXC) as FAT32. 1 GB holds roughly 50,000 re-encoded 20 KB pictures |
 | 1 | 2.4 GHz Wi-Fi antenna | Heltec's case version integrates an FPC 2.4 GHz antenna on the second IPEX connector. A bare board needs an IPEX 2.4 GHz antenna |
 | 1 | USB-C 5 V supply, ≥ 500 mA (optional) | Bench power, or mains power instead of the solar panel |
-| 1 | Computer on the same LAN | Runs `server/listen.py` and receives the uploads ([usage.md](usage.md#1-run-the-upload-server)). Optional: without Wi-Fi the base station keeps collecting to the SD card |
+| 1 | Upload server | Runs `loracamera-server` (Docker image `gfnord/loracamera-server`) and receives the uploads: a computer on the same LAN or an internet host ([usage.md](usage.md#1-run-the-upload-server)). Optional: without Wi-Fi the base station keeps collecting to the SD card |
 
 Heltec's V4-R8 datasheet (`WiFi_LoRa_32_V4R8.pdf`) and schematic (`HTIT-WBR8H_V4.3.2.pdf`) are the sources for this page. Heltec's copyright notice doesn't allow redistributing them, so they aren't committed. Get them from Heltec support or the product page.
 
@@ -223,9 +223,9 @@ All figures are estimates from the datasheet currents above, not measurements.
 **With `motion = 0`** the remote node never sleeps:
 
 - **Idle receive alone uses ~1.8 Ah per day** (75 mA around the clock).
-- **The default settings run almost continuously.** The local node asks for the next picture `CHECK_EVERY_MS` (10 s) after the previous transfer ends, so ~1,900 pictures a day, roughly **5–8 Ah per day**. A solar panel on this board can't keep up with that.
+- **The default settings run almost continuously.** The local node asks for the next picture `poll_interval` (10 s) after the previous transfer ends, so ~1,900 pictures a day, roughly **5–8 Ah per day**. A solar panel on this board can't keep up with that.
 
-For solar operation with `motion = 0`, raise `CHECK_EVERY_MS` in `src/local/main.cpp`. At one picture every 10 minutes the remote needs about 2.2 Ah per day, which a 2–3 W panel covers on sunny days. A 3000 mAh cell then bridges about a day without sun; use a larger one for longer cloudy spells.
+For solar operation with `motion = 0`, raise `poll_interval` in the `[loracamera]` section of `platformio.ini` and reflash the base station. At one picture every 10 minutes (`poll_interval = 600`) the remote needs about 2.2 Ah per day, which a 2–3 W panel covers on sunny days. A 3000 mAh cell then bridges about a day without sun; use a larger one for longer cloudy spells.
 
 **Base station.** It never sleeps: with `motion = 1` it has to be listening whenever the remote announces a picture, and with `motion = 0` it drives the polling. LoRa receive (~75 mA) plus Wi-Fi. The firmware keeps Wi-Fi connected with the core's default modem-sleep power saving, which adds on average a few tens of mA [estimate]; active transmission draws 120–170 mA. SD writes are brief. That puts the base station around **2.5–3.5 Ah per day** [estimate], at or above the ~2.7 Ah a solar panel can put back through the charger. So:
 

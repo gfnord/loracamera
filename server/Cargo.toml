@@ -1,0 +1,17 @@
+[package]
+name = "loracamera-server"
+version = "0.1.0"
+edition = "2024"
+description = "HTTP PUT receiver that saves the base station's uploads to disk"
+publish = false
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+tokio = { version = "1.54.1", features = ["fs", "io-util", "macros", "net", "rt", "signal"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

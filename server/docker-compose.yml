@@ -1,0 +1,19 @@
+# Upload server behind the host's Caddy (shared `proxy-network`). No port is published:
+# Caddy proxies http:// (ESP32) and https:// (browsers) loracam.nobrega.com.br to loracamera-server:8000.
+# Put UPLOAD_TOKEN=<secret> in .env next to this file; uploads land in ./captures
+# (owned by UID 10001, the container user).
+services:
+  loracamera-server:
+    image: gfnord/loracamera-server:latest
+    container_name: loracamera-server
+    restart: unless-stopped
+    environment:
+      UPLOAD_TOKEN: ${UPLOAD_TOKEN:?set UPLOAD_TOKEN in .env}
+    volumes:
+      - ./captures:/captures
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true

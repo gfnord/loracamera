@@ -1,6 +1,6 @@
 # loracamera documentation
 
-loracamera sends JPEG frames from a serial camera over a point-to-point 915 MHz LoRa link. A second board near Wi-Fi uploads them to a small HTTP server on your PC. By default the field board sleeps and only takes a picture when its PIR motion sensor triggers ([configuration.md](configuration.md#motion-detection-pir)). Microphone audio clips can be added at build time ([configuration.md](configuration.md#audio-capture-optional)); they're off by default.
+loracamera sends JPEG frames from a serial camera over a point-to-point 915 MHz LoRa link. A second board near Wi-Fi uploads them to a small HTTP server (Rust, shipped as a Docker image). By default the field board sleeps and only takes a picture when its PIR motion sensor triggers ([configuration.md](configuration.md#motion-detection-pir)). Microphone audio clips can be added at build time ([configuration.md](configuration.md#audio-capture-optional)); they're off by default.
 
 ```mermaid
 flowchart LR
@@ -15,11 +15,11 @@ flowchart LR
         L -->|sdcard = 1| SD[(microSD: /loracam/NNNNNN.jpg)]
     end
     R <-->|LoRa 915 MHz| L
-    L -->|HTTP PUT over Wi-Fi| S[server/listen.py]
-    S --> F[(MMDDHHMM.jpg / .raw)]
+    L -->|HTTP PUT over Wi-Fi, bearer token| S[server/ loracamera-server]
+    S --> F[(MMDDHHMM.jpg / .raw, UTC)]
 ```
 
-With `motion = 1` (the default) the remote node spends its time in deep sleep. When the PIR sees movement it wakes, captures the picture into RAM, re-encodes it smaller (grayscale at night), and announces it; the local node, which is always listening, then pulls it one 250-byte packet at a time and tells the remote it's done, and the remote goes back to sleep. With `motion = 0` (no PIR) the local node asks for the data instead: every 10 s it requests a picture, or alternates between picture and audio if audio is enabled. Either way the local node saves each file to its microSD card, then uploads it when Wi-Fi is up. Both nodes can run from a LiPo and a solar panel.
+With `motion = 1` (the default) the remote node spends its time in deep sleep. When the PIR sees movement it wakes, captures the picture into RAM, re-encodes it smaller (grayscale at night), and announces it; the local node, which is always listening, then pulls it one 250-byte packet at a time and tells the remote it's done, and the remote goes back to sleep. With `motion = 0` (no PIR) the local node asks for the data instead: every `poll_interval` seconds (10 by default) it requests a picture, or alternates between picture and audio if audio is enabled. Either way the local node saves each file to its microSD card, then uploads it when Wi-Fi is up. Both nodes can run from a LiPo and a solar panel.
 
 ## Contents
 
@@ -38,13 +38,13 @@ With `motion = 1` (the default) the remote node spends its time in deep sleep. W
 platformio.ini            build environments: local, remote (V4-R8); local_v2, remote_v2 (Heltec V2)
 src/local/main.cpp        base station: receives (or requests) data, saves it, uploads it
 src/local/storage.*       microSD card on the base station (sdcard = 1)
-src/local/auth.h          your Wi-Fi credentials (not committed, you create it)
+src/local/auth.h          your Wi-Fi credentials, SERVER_URL and UPLOAD_TOKEN (not committed, you create it)
 src/remote/main.cpp       field side: PIR wake-up and deep sleep, camera (+ optional microphone) capture, serves packets
 src/remote/reencode.*     JPEG re-encoding on the ESP32-S3 (quality, night grayscale)
 lib/Board/                Board.h (shared link settings, selects the board header) + per-board HeltecV4R8.*, HeltecV2.* (pins, Vext/OLED, radio and its sleep; KCT8103L front end on the V4-R8)
 lib/Display/              OLED status screen for both nodes (display / display_v2)
 lib/VC0706/               Adafruit VC0706 camera library, slowed down for the ESP32, 32-bit read offset
-server/listen.py          HTTP PUT receiver that saves uploads to disk
+server/                   loracamera-server (Rust): HTTP PUT receiver that saves uploads to disk; Dockerfile, docker-compose.yml
 ```
 
 ## Status

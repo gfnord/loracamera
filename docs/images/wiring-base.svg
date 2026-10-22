@@ -181,7 +181,7 @@
 <text x="56" y="256" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Requests pictures from the remote node over LoRa.</text>
 <text x="56" y="278" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Saves each received file to the SD card</text>
 <text x="56" y="300" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  (sdcard = 1 in platformio.ini).</text>
-<text x="56" y="322" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Uploads it to server/listen.py when Wi-Fi</text>
+<text x="56" y="322" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Uploads it to loracamera-server when Wi-Fi</text>
 <text x="56" y="344" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  is connected; without Wi-Fi it keeps</text>
 <text x="56" y="366" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">  collecting to the card.</text>
 <text x="56" y="388" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="start" font-weight="normal" fill="#1f2328">Header J2 is unused; no 5 V needed.</text>

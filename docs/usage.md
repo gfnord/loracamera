@@ -2,32 +2,67 @@
 
 ## 1. Run the upload server
 
-`server/listen.py` is Python's built-in HTTP server with a `PUT` handler added. It needs no dependencies.
+`server/` is `loracamera-server`, a small Rust HTTP server that saves the base station's uploads to disk. It's published as the Docker image `gfnord/loracamera-server` (linux/amd64 and linux/arm64, ~1 MB, runs as UID 10001).
 
 ```sh
-mkdir -p ~/loracamera-captures && cd ~/loracamera-captures
-python3 /path/to/loracamera/server/listen.py
+mkdir -p ~/loracamera-captures && sudo chown 10001:10001 ~/loracamera-captures
+docker run -d --name loracamera-server --restart unless-stopped -p 8000:8000 \
+  -e UPLOAD_TOKEN=<secret> -v ~/loracamera-captures:/captures gfnord/loracamera-server
 ```
 
-- It listens on **port 8000, on all interfaces**. Python's `http.server.test()` sets the port and listen address; the script has no options.
-- Every upload is saved to the **current directory** as `MMDDHHMM.<ext>` (month, day, hour, minute of arrival). The extension is the last three characters of the URL path, so `jpg` or `raw`.
-- Two uploads of the same type within the same minute overwrite each other, and the name has no year.
-- It also serves the current directory over `GET`, including a file listing, so anyone on the network can browse it. Run it only on a trusted LAN.
+Without Docker: `cd server && UPLOAD_TOKEN=<secret> CAPTURE_DIR=~/loracamera-captures cargo run --release`.
 
-Test it from another machine before involving the boards:
+Generate the token with `openssl rand -hex 32` and put the same value in `UPLOAD_TOKEN` in `src/local/auth.h` ([getting-started.md](getting-started.md#upload-server-address-and-token-required)).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `UPLOAD_TOKEN` | required, ≥ 16 characters | Uploads must send `Authorization: Bearer <token>`; others get `401` |
+| `LISTEN_ADDR` | `0.0.0.0:8000` | Listen address and port |
+| `CAPTURE_DIR` | `.` (`/captures` in the image) | Where files are saved; created if missing |
+| `MAX_UPLOAD_BYTES` | `262144` | Larger uploads get `413`. The largest file a base station sends is 125000 bytes (V4-R8) |
+
+- It accepts only `PUT` (`405` otherwise): there is no file listing or download, so pictures are only reachable on the server's disk.
+- Every upload is saved as `MMDDHHMM.<ext>`: month, day, hour and minute of arrival in **UTC**. The extension is the last three characters of the URL path (letters and digits only, else `400`), so `jpg` or `raw`. A second upload with the same name is saved as `MMDDHHMM-2.<ext>`, `-3` …, never overwriting. The name has no year.
+- Each request logs one line: client address (from `X-Forwarded-For` behind a proxy), method, path, status and the saved file name or rejection reason.
+
+Test it before involving the boards:
 
 ```sh
-curl -X PUT --upload-file some.jpg http://<server-ip>:8000/image.jpg
-# → Saved "10181432.jpg"
+curl -X PUT -H "Authorization: Bearer <secret>" --upload-file some.jpg http://<server>:8000/image.jpg
+# → Saved "10181432.jpg" (23456 bytes)
 ```
 
-Then set `SERVER_URL` in `src/local/main.cpp` to `http://<server-ip>:8000` and flash the local node.
+Then set `SERVER_URL` and `UPLOAD_TOKEN` in `src/local/auth.h` and flash the local node.
+
+### Production deployment (Docker Hub + Caddy)
+
+The production server runs the image behind the host's Caddy, at `http://loracam.nobrega.com.br`:
+
+- `/root/loracamera/docker-compose.yml` is a copy of [`server/docker-compose.yml`](../server/docker-compose.yml): the container joins Caddy's `proxy-network` and publishes no port. `/root/loracamera/.env` (mode 600) holds `UPLOAD_TOKEN=…`; files land in `/root/loracamera/captures` (owned by 10001).
+- The Caddyfile (`/root/caddy/Caddyfile`) serves the name over both schemes:
+  ```
+  http://loracam.nobrega.com.br, https://loracam.nobrega.com.br {
+  	reverse_proxy loracamera-server:8000
+  }
+  ```
+  The ESP32 firmware doesn't do TLS, so it uploads over plain HTTP; because the `http://` site is explicit, Caddy doesn't redirect it to HTTPS. HTTPS (Let's Encrypt, automatic) is there for browsers: `nobrega.com.br` sends HSTS with `includeSubDomains`, so a browser that has visited it refuses plain HTTP on every subdomain. A browser only ever sees `405 Only PUT is supported`, which confirms the server is reachable. Apply Caddyfile changes with `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`; the Caddyfile is a single-file bind mount, so edit it in place (`cat new > Caddyfile`), not with tools that replace the file.
+- DNS: an `A` record for `loracam.nobrega.com.br` → the server, **DNS only** (grey cloud) in Cloudflare. A proxied record breaks uploads when Cloudflare redirects HTTP to HTTPS.
+
+Release a new version from the repository root, then update the server:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t gfnord/loracamera-server:<version> -t gfnord/loracamera-server:latest --push server
+ssh root@<server> 'cd /root/loracamera && docker compose pull && docker compose up -d'
+```
+
+The Dockerfile cross-compiles both platforms natively (static musl binaries, no QEMU). With the default `docker` buildx driver, create a multi-platform builder first: `docker buildx create --driver docker-container --use`.
 
 ### Running the server under WSL2
 
 By default WSL2 sits behind NAT, so the ESP32 can't reach a server running inside WSL. Pick one of these:
 
-- **Run it on Windows instead.** Run `py server\listen.py` from Windows Python and use the Windows LAN IP in `SERVER_URL`. Allow Python through Windows Defender Firewall when prompted.
+- **Run it on Windows instead**, with Docker Desktop (same `docker run` as above), and use the Windows LAN IP in `SERVER_URL`. Allow inbound TCP 8000 through Windows Defender Firewall.
 - **Mirrored networking.** In `%UserProfile%\.wslconfig`:
   ```ini
   [wsl2]
@@ -43,7 +78,7 @@ By default WSL2 sits behind NAT, so the ESP32 can't reach a server running insid
 
 1. Attach antennas to **both** boards before powering them.
 2. Power the **remote** node: battery + solar, or USB. With `motion = 1` (default) it initialises the radio, logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and goes to deep sleep; on a V4-R8 its USB serial port disappears until the PIR triggers. With `motion = 0` it stays awake and waits for requests.
-3. Power the **local** node (base station): battery + solar, or USB. It starts the radio (after resetting the OLED, with the display on), mounts the SD card (with `sdcard = 1`) and tries Wi-Fi for up to 20 s. With `motion = 1` it then listens for pictures; with `motion = 0` it sends its first request after ~10 s. Without Wi-Fi it still collects pictures to the SD card.
+3. Power the **local** node (base station): battery + solar, or USB. It starts the radio (after resetting the OLED, with the display on), mounts the SD card (with `sdcard = 1`) and tries Wi-Fi for up to 20 s. With `motion = 1` it then listens for pictures; with `motion = 0` it sends its first request after `poll_interval` seconds (10 by default). Without Wi-Fi it still collects pictures to the SD card.
 
 The order doesn't matter. With `motion = 1` the remote repeats each announcement for 30 s, which covers the local node's boot; with `motion = 0` the local node keeps retrying until the remote node answers.
 
@@ -90,7 +125,7 @@ Type 0 is a picture and type 1 is audio. With the default `audio = 0` every requ
 
 If the remote node stops answering in the middle of a transfer (`motion = 1`), the log shows `Remote stopped answering; abandoning the transfer at packet N` after 20 s, and the truncated picture is saved and uploaded.
 
-Without Wi-Fi the log shows `Wi-Fi not connected yet; continuing, uploads wait for it` at boot and `Wi-Fi not connected, upload skipped` after each picture (see [troubleshooting](troubleshooting.md#wi-fi-not-connected-yet--wi-fi-not-connected-upload-skipped)).
+Without Wi-Fi the log shows `Wi-Fi not connected yet to "<SSID>": <reason> (status N); continuing, uploads wait for it` at boot and `Wi-Fi not connected, upload skipped` after each picture (see [troubleshooting](troubleshooting.md#wi-fi-not-connected-yet--wi-fi-not-connected-upload-skipped)).
 
 ### What the remote node logs
 
@@ -128,7 +163,7 @@ With `motion = 1` a V4-R8's USB port re-enumerates on every wake-up, so the firs
 Each picture exists in up to two places:
 
 - **On the base station's SD card** (`sdcard = 1`): `/loracam/000001.jpg`, `000002.jpg` … numbered in arrival order and never overwritten. File dates are correct once Wi-Fi has set the clock (UTC). To read them, power the base station off, take the card out and copy the folder on any computer.
-- **On the server** (when Wi-Fi is up): `MMDDHHMM.jpg` in the folder `listen.py` runs in.
+- **On the server** (when Wi-Fi is up): `MMDDHHMM.jpg` (UTC) in the server's `CAPTURE_DIR`; on the production server, `/root/loracamera/captures`.
 
 Both are the same 640×480 JPEG (by default). With re-encoding on (V4-R8 remote) it's the remote node's re-encoded copy: grayscale for night shots, colour otherwise (see [configuration.md](configuration.md#image-re-encoding)). A V2 remote sends the camera's JPEG unchanged (`camera_compression` sets its size). Open it with any image viewer.
 
@@ -150,5 +185,5 @@ In Audacity use **File → Import → Raw Data** with *Signed 16-bit PCM*, *Litt
 
 - **Range.** The original V2 build reached ~1 km through dense woods at ~20 dBm with SF7/250 kHz. The V2 firmware now transmits at 17 dBm (the SX1276's maximum continuous power), about 3 dB less than a V4-R8 at its default; range with the new V2 build hasn't been measured. To trade speed for range, raise the spreading factor first (see [configuration.md](configuration.md#range-vs-speed)), then TX power.
 - **Antennas.** Height and line of sight matter more than power. Keep both antennas vertical and away from metal and the battery.
-- **Battery life.** The numbers in this item are for the V4-R8; V2 deep-sleep current and per-picture cost have not been measured. With `motion = 1` (default) the remote node deep-sleeps between motion events (tens of µA [estimate]) and costs ~2–3 mAh per picture, so a small solar panel easily keeps up unless the PIR triggers all day. Aim the PIR away from moving branches, roads and sun-warmed surfaces. With `motion = 0` it never sleeps: about 75 mA in receive, and several hundred mA while transmitting or running the camera; with the default 10 s between pictures a solar-charged battery can't keep up, so raise `CHECK_EVERY_MS`. See [battery and solar sizing](hardware.md#battery-and-solar-sizing). The V2 has no solar input: a panel needs an external charge controller ([hardware.md](hardware.md#heltec-v2)).
+- **Battery life.** The numbers in this item are for the V4-R8; V2 deep-sleep current and per-picture cost have not been measured. With `motion = 1` (default) the remote node deep-sleeps between motion events (tens of µA [estimate]) and costs ~2–3 mAh per picture, so a small solar panel easily keeps up unless the PIR triggers all day. Aim the PIR away from moving branches, roads and sun-warmed surfaces. With `motion = 0` it never sleeps: about 75 mA in receive, and several hundred mA while transmitting or running the camera; with the default 10 s between pictures a solar-charged battery can't keep up, so raise `poll_interval` in `platformio.ini`. See [battery and solar sizing](hardware.md#battery-and-solar-sizing). The V2 has no solar input: a panel needs an external charge controller ([hardware.md](hardware.md#heltec-v2)).
 - **Interference.** Other 915 MHz LoRa devices using sync word `0x12` (private networks) are received too. Packets that don't match the protocol are ignored. Changing `LORA_SYNC_WORD` on both nodes filters most of them out.

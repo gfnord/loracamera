@@ -15,16 +15,17 @@ Motion detection is **on by default**: the remote node sleeps and takes a pictur
 
 ```ini
 [loracamera]
-motion = 1   ; default; 0 = no PIR, the local node polls for a picture every 10 s
+motion = 1          ; default; 0 = no PIR, the local node polls for a picture
+poll_interval = 10  ; motion = 0 only: seconds between the end of one transfer and the next request
 ```
 
-Then rebuild and reflash **both** boards: the two values use different protocols ([protocol.md](protocol.md#motion-mode-motion--1)). The value reaches the code as `LORACAMERA_MOTION`.
+Then rebuild and reflash **both** boards: the two values use different protocols ([protocol.md](protocol.md#motion-mode-motion--1)). The value reaches the code as `LORACAMERA_MOTION`. `poll_interval` (0–86400) is used only by the local node, so changing it needs only the base station reflashed; it reaches the code as `LORACAMERA_POLL_INTERVAL` and sets `CHECK_EVERY_MS` in `src/local/main.cpp`. After a request that brings no transfer back (no answer, or the camera failed), the interval counts from when that request was sent.
 
 | | `motion = 1` (default) | `motion = 0` |
 |---|---|---|
-| Who starts a transfer | the remote node, when the PIR triggers | the local node, every `CHECK_EVERY_MS` |
+| Who starts a transfer | the remote node, when the PIR triggers | the local node, `poll_interval` seconds after the last transfer |
 | Remote node between pictures | deep sleep (radio asleep, front end, Vext and camera off) | awake in receive mode (~75 mA) |
-| Local node | listens for announcements, never transmits on its own | sends a request every `CHECK_EVERY_MS` |
+| Local node | listens for announcements, never transmits on its own | sends a request `poll_interval` seconds after the last transfer |
 | PIR wiring | V4-R8: GPIO6 + 3V3 + GND ([hardware.md](hardware.md#motion-sensor-pir)); V2: GPIO32 + 3V3 + GND ([hardware.md](hardware.md#heltec-v2)) | not needed |
 | Audio | not available (`audio = 1` fails the build) | optional |
 
@@ -84,12 +85,12 @@ What the screens show:
 | Node | When | Screen |
 |---|---|---|
 | both | boot | `Base station` / `Remote node`, `Starting LoRa...`, or `Starting LoRa failed!` |
-| local | ready | `Base station ready`, Wi-Fi IP or `Wi-Fi not connected`, SD card state (with `sdcard = 1`), `Waiting for motion` or `Polling the remote` |
+| local | ready | `Base station ready`, Wi-Fi IP, `Wi-Fi: SSID not found` or `Wi-Fi: not connected`, SD card state (with `sdcard = 1`), `Waiting for motion` or `Polling the remote` |
 | local | `motion = 0`, asking | `Requesting picture` (or `audio`), attempt number |
 | local | receiving | `Receiving`, `i / n [%]`, RSSI of the last data packet |
 | local | after a transfer | `Received`, size and time, `Saved to SD card` / `SD card save failed`, `Uploaded` / `Upload failed` / `Upload skipped: no Wi-Fi`; or `Nothing received` (with `Too big for this board` if the file didn't fit) |
 | remote | ready | `LoRa OK`, `Waiting for requests` (`motion = 0`) or `Sleeps until motion` |
-| remote | capturing | `Motion detected`, `Taking picture...`, `Recording audio`; then `Picture ready` with the size, or `No picture` (no camera answer: check the serial log) |
+| remote | capturing | `Motion detected`, `Taking picture...` (`Test image...` with `test_image = 1`), `Recording audio`; then `Picture ready` with the size, or `No picture` (no camera answer: check the serial log) |
 | remote | sending | `Announcing` and the packet count; then `Sending`, `i / n`, RSSI of the request (redrawn at most every 250 ms so the drawing doesn't slow the transfer) |
 | remote | `motion = 1`, end | `Transfer done` or `No answer from the base station`; the screen goes dark when Vext is switched off for deep sleep |
 
@@ -205,9 +206,10 @@ Shared constants are in `lib/Board/Board.h`; `MAX_TRANSFER_BUFFER` is per board.
 
 | Constant | Default | Meaning |
 |---|---|---|
-| `SERVER_URL` | `"http://192.168.0.150:8000"` | Upload target, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw`. Non-2xx responses and connection errors are logged as `Upload failed: …`; the file isn't retried (it's on the SD card with `sdcard = 1`) |
+| `SERVER_URL` | from `auth.h` | Upload target, `http://` only, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw`. Non-2xx responses and connection errors are logged as `Upload failed: …`; the file isn't retried (it's on the SD card with `sdcard = 1`) |
+| `UPLOAD_TOKEN` | from `auth.h` | Sent as `Authorization: Bearer <token>`; must match the server's `UPLOAD_TOKEN` ([usage.md](usage.md#1-run-the-upload-server)), or uploads fail with `401` |
 | `WIFI_SSID`, `WIFI_PASS` | from `auth.h` | 2.4 GHz network |
-| `CHECK_EVERY_MS` | `10000` | `motion = 0` only. Pause after a finished transfer before the next request |
+| `CHECK_EVERY_MS` | `poll_interval` × 1000 (10000) | `motion = 0` only. Pause after a finished transfer before the next request. Set `poll_interval` in `platformio.ini` (see [Motion detection](#motion-detection-pir)) |
 | `MAX_RFT_RESPONSE_MS` | `30000` | `motion = 0` only. How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480 and 38400 baud, per the original code comment; less at 115200) + 1 s power-off + re-encoding (≈ 1 s [estimate]); audio (if enabled) = `AUDIO_SECONDS` |
 | `REQUEST_TIMER` | `200` | Retries for a request, and per data packet (with `motion = 1` also capped by `MOTION_PACKET_GIVE_UP_MS`). Must fit in a `uint8_t` (≤ 255) |
 | `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255 |
@@ -275,6 +277,17 @@ Fixed camera settings in `src/remote/main.cpp`:
 
 Each 64-byte chunk is a separate request and response. The library waits for data in 10 ms steps, so the readout doesn't speed up in proportion to the baud rate.
 
+### Test image (no camera)
+
+To test the link, the SD card and the upload without a camera, build the **remote** node with:
+
+```ini
+[loracamera]
+test_image = 1   ; default 0
+```
+
+Each capture then skips the camera entirely (it stays switched off) and loads a built-in 640×480 JPEG test card, 22704 bytes (91 packets), from `src/remote/test_image.h`. The picture then follows the camera picture's path: re-encoded on a V4-R8 with `jpeg_quality` > 0, sent unchanged on a V2. The remote logs `test_image = 1: using the built-in 22704-byte test JPEG, camera not used` and shows `Test image...`. With `motion = 0` every request gets the test card (run on two V2s). With `motion = 1` each PIR wake-up sends it; bridging the PIR pin to 3V3 with a jumper simulates motion (not yet run on hardware). Only the remote node uses it; set it back to `0` and reflash the remote before fitting the camera. To use another picture, regenerate the header from any JPEG up to 72000 bytes: `xxd -i < picture.jpg`, wrapped in `static const uint8_t TEST_JPEG[] = { … };`.
+
 ### Image re-encoding
 
 **Heltec V2 remotes do not re-encode.** The V2 has no PSRAM, and re-encoding needs a full-frame pixel buffer (640×480×3 ≈ 920 KB) that only fits in PSRAM. On a V2 remote `jpeg_quality`, `night_grayscale` and `night_max_chroma` are ignored: the camera's JPEG is sent unchanged, and the boot log says `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`. Camera JPEGs larger than 72000 bytes are dropped; raise `camera_compression` to shrink them (see [Camera](#camera)). The rest of this section describes the V4-R8.
@@ -311,6 +324,6 @@ The transport moves any byte buffer. To send something else, such as sensor logs
 
 1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio, reserved even when audio is disabled), for example `0xFB`. `0xFA`, `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
 2. **Local:** send the new byte from `request_transmission()`, which currently sends `0xFC + content_type`. Give it a URL and `Content-Type` in `put_to_server()`.
-3. **Server:** `listen.py` takes the file extension from the last three characters of the URL path, so `/data.csv` is saved as `MMDDHHMM.csv`.
+3. **Server:** `loracamera-server` takes the file extension from the last three characters of the URL path (letters and digits only), so `/data.csv` is saved as `MMDDHHMM.csv`. Raise its `MAX_UPLOAD_BYTES` if the payload can exceed 262144 bytes.
 
 Packet formats are listed in [protocol.md](protocol.md).

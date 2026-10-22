@@ -22,12 +22,13 @@ Pin details, bill of materials, power budget and camera specs: [docs/hardware.md
 
 ```sh
 uv tool install platformio                   # or: pipx install platformio
-printf '#define WIFI_SSID "ssid"\n#define WIFI_PASS "pass"\n' > src/local/auth.h
-# set SERVER_URL in src/local/main.cpp to your PC's LAN IP; options live in [loracamera] in platformio.ini
+printf '#define WIFI_SSID "ssid"\n#define WIFI_PASS "pass"\n#define SERVER_URL "http://192.168.0.150:8000"\n#define UPLOAD_TOKEN "change-me-long-secret"\n' > src/local/auth.h
+# options live in [loracamera] in platformio.ini
 pio run -e remote -t upload                  # field board
 pio run -e local  -t upload                  # wifi-side board
 # Heltec V2 boards instead: -e remote_v2 / -e local_v2 (any mix of the two board types works)
-python3 server/listen.py                     # saves uploads to the current directory
+docker run -d -p 8000:8000 -e UPLOAD_TOKEN=change-me-long-secret -v "$PWD/captures:/captures" gfnord/loracamera-server
+# upload server (docs/usage.md); captures/ must be writable by UID 10001
 ```
 
 ## Documentation

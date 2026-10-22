@@ -22,8 +22,8 @@ Every data packet carries `LORA_TRANSFER_BUFFER` (250) payload bytes. The last o
 sequenceDiagram
     participant L as Local (Wi-Fi side)
     participant R as Remote (field)
-    participant S as listen.py
-    Note over L: every CHECK_EVERY_MS (10 s)
+    participant S as loracamera-server
+    Note over L: poll_interval (10 s) after the last transfer
     L->>R: RFT F9 FC (picture) / F9 FD (audio, if enabled)
     Note over R: capture, power the camera off,<br/>re-encode into transfer_buffer<br/>(picture ≈ 25 s, audio 5 s)
     R->>L: F9 C2 n (sent 5 times, 20 ms apart)
@@ -45,7 +45,7 @@ The remote node starts the transfer, then lets the local node pull it exactly as
 sequenceDiagram
     participant L as Local (Wi-Fi side)
     participant R as Remote (field)
-    participant S as listen.py
+    participant S as loracamera-server
     Note over R: deep sleep until the PIR output goes HIGH
     Note over R: wake, capture, power the camera off,<br/>re-encode into transfer_buffer (≈ 25 s)
     loop until the first packet request, at most 6 times, 5 s apart
@@ -69,7 +69,7 @@ On the local node:
 
 | Phase | Wait | Retries | Worst case |
 |---|---|---|---|
-| RFT → RFT response (`motion = 0`) | `MAX_RFT_RESPONSE_MS` = 30 s | `REQUEST_TIMER` = 200 | ~100 min, then `Request timer timed out`. The next RFT goes out right away (the 10 s interval is counted from the start of the previous attempt) |
+| RFT → RFT response (`motion = 0`) | `MAX_RFT_RESPONSE_MS` = 30 s | `REQUEST_TIMER` = 200 | ~100 min, then `Request timer timed out`. The next RFT goes out right away (the `poll_interval` is counted from the start of the previous attempt) |
 | Packet request → data packet (`motion = 0`) | `RESPONSE_TIMER` × ~20 ms ≈ 4 s | `REQUEST_TIMER` = 200, resent right after each timeout | ~14 min per packet. The packet is then **skipped**, and the uploaded file is shorter and corrupted |
 | Packet request → data packet (`motion = 1`) | ≈ 4 s per attempt | until `MOTION_PACKET_GIVE_UP_MS` = 20 s | 20 s. The rest of the transfer is then **abandoned** (`Remote stopped answering`), and the file is saved and uploaded truncated |
 
@@ -93,7 +93,7 @@ The remote node is stateless between requests. It serves any packet index from i
 
 ## Edge cases
 
-- **Capture failed:** if the camera can't take a picture, `content_length` is 0. With `motion = 0` the remote answers `F9 C2 00 00`; the local node treats 0 packets as "nothing to do" and asks for a picture again after `CHECK_EVERY_MS`, and with `audio = 1` it doesn't switch to audio in that case. With `motion = 1` the remote announces nothing (`No picture to send`) and goes back to sleep.
+- **Capture failed:** if the camera can't take a picture, `content_length` is 0. With `motion = 0` the remote answers `F9 C2 00 00`; the local node treats 0 packets as "nothing to do" and asks for a picture again `poll_interval` seconds after that request, and with `audio = 1` it doesn't switch to audio in that case. With `motion = 1` the remote announces nothing (`No picture to send`) and goes back to sleep.
 - **Motion during a transfer (`motion = 1`):** the remote is awake and busy, so the PIR isn't watched. If its output is still HIGH when the remote goes back to sleep, the next picture follows at once; a shorter movement in between is missed.
 - **Audio request to a picture-only remote:** a remote node built with `audio = 0` ignores `F9 FD` entirely. Build both nodes with the same `audio` value.
 - **Remote busy:** the remote handles one request at a time and doesn't listen while it captures (up to ~25 s for a picture). The local node waits up to `MAX_RFT_RESPONSE_MS` for the answer.

@@ -6,7 +6,7 @@ Go through these on the bench, with the boards a few metres apart. At very close
 
 1. **Remote radio.** Flash `remote` (V2: `remote_v2`), open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and, on a V4-R8, its USB port disappears; that's expected. On a V2 remote the log also says `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`; that's expected too.
 2. **Local radio, SD card and Wi-Fi.** Flash `local` (V2: `local_v2`) with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With the display on, the OLED ends on `Base station ready` with the Wi-Fi and SD card state, or shows `Starting LoRa failed!`.
-3. **Server.** `curl -X PUT` a file to `listen.py` from another machine (see [usage.md](usage.md#1-run-the-upload-server)).
+3. **Server.** `curl -X PUT` a file with the bearer token to the upload server from another machine (see [usage.md](usage.md#1-run-the-upload-server)); expect `Saved "…"`.
 4. **Link.** With `motion = 1`, wave a hand in front of the PIR: within ~30 s the local log shows `Motion picture announced, N packets`, then packet progress with RSSI. With `motion = 0` it shows `Receiving rft response, N packets` within ~30 s of booting.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
 6. **Audio** (only with `audio = 1`, `motion = 0`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
@@ -78,7 +78,10 @@ V4-R8 only: its KCT8103L front end must be powered and switched. `radioBegin()` 
 ## Local node
 
 ### `Wi-Fi not connected yet` / `Wi-Fi not connected, upload skipped`
-The base station waits `WIFI_CONNECT_TIMEOUT_MS` (20 s) at boot, then runs without Wi-Fi and keeps retrying in the background. Pictures still go to the SD card. Check `WIFI_SSID`/`WIFI_PASS` in `auth.h`, and make sure the network is 2.4 GHz and in range.
+The base station waits `WIFI_CONNECT_TIMEOUT_MS` (20 s) at boot, then runs without Wi-Fi and keeps retrying in the background. Pictures still go to the SD card. The boot log names the reason:
+- `SSID not found (2.4 GHz only) (status 1)`: no 2.4 GHz network with exactly the name in `WIFI_SSID` (case-sensitive) is in range. Dual-band routers often use one name for both bands or a separate name for 2.4 GHz; a 5 GHz-only network is invisible to the ESP32. Check the router's 2.4 GHz network name; a phone or PC scan shows which names are broadcast on 2.4 GHz.
+- `connect failed (password?) (status 4)`: the network was found but refused the connection. Check `WIFI_PASS`, and that the network uses WPA2 (or WPA2/WPA3 mixed), not WPA3-only.
+- Anything else: out of range or the router isn't answering.
 
 ### `SD card not found`
 - The card must be **FAT32**. 64 GB+ cards come formatted exFAT, which this firmware can't read: reformat them.
@@ -103,10 +106,11 @@ The picture announced by the remote is larger than the local board's transfer bu
 
 ### Uploads never appear on the server
 - With `sdcard = 1` every picture is also on the card, so nothing is lost; copy the missed ones from `/loracam`.
-- The local node logs `Upload failed: <status or error>` when the server doesn't answer with 2xx, and `Wi-Fi not connected, upload skipped` without Wi-Fi. Watch the `listen.py` console for `"PUT /image.jpg HTTP/1.1" 201` lines.
-- `SERVER_URL` must use the server's LAN IP and port 8000. Test it with `curl` from another device on the same network.
+- The local node logs `Upload failed: <status or error>` when the server doesn't answer with 2xx, and `Wi-Fi not connected, upload skipped` without Wi-Fi. Watch the server log (`docker logs -f loracamera-server`) for `"PUT /image.jpg" 201 Saved "…"` lines.
+- `Upload failed: 401`: `UPLOAD_TOKEN` in `src/local/auth.h` doesn't match the server's `UPLOAD_TOKEN`. `413`: the file exceeds the server's `MAX_UPLOAD_BYTES`.
+- `SERVER_URL` must be `http://` (the firmware doesn't do TLS): the server's LAN IP and port 8000, or a host name that Caddy serves over plain HTTP. Behind Cloudflare the DNS record must be DNS only: a proxied record that redirects to HTTPS fails. Test it with `curl` from another device.
 - Server inside WSL2: see [usage.md](usage.md#running-the-server-under-wsl2).
-- Check the firewall on the server machine for inbound TCP 8000.
+- A server on your LAN: check its firewall for inbound TCP 8000.
 
 ## Remote node
 

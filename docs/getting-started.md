@@ -36,28 +36,24 @@ If you'd rather use an IDE, the PlatformIO extension for VS Code opens this fold
 
 ### Wi-Fi credentials (required)
 
-Create `src/local/auth.h`. Git ignores it, so your password stays local:
+Create `src/local/auth.h`. Git ignores it, so your password and upload token stay local:
 
 ```c
 #define WIFI_SSID "your_ssid"
 #define WIFI_PASS "your_password"
-```
-
-The `local` and `local_v2` environments won't compile without this file. The ESP32-S3 (V4-R8) and the ESP32 (V2) only support 2.4 GHz Wi-Fi.
-
-### Upload server address (required)
-
-Edit `SERVER_URL` in `src/local/main.cpp` and set it to the machine that runs `server/listen.py`:
-
-```c
 #define SERVER_URL "http://192.168.0.150:8000"
+#define UPLOAD_TOKEN "the server's UPLOAD_TOKEN"
 ```
 
-The port is fixed at 8000 by `listen.py`. If the server runs inside WSL2, see [usage.md](usage.md#running-the-server-under-wsl2).
+The `local` and `local_v2` environments won't compile without this file, and stop with an `#error` if `SERVER_URL` or `UPLOAD_TOKEN` is missing. The ESP32-S3 (V4-R8) and the ESP32 (V2) only support 2.4 GHz Wi-Fi.
+
+### Upload server address and token (required)
+
+`SERVER_URL` is the upload server ([usage.md](usage.md#1-run-the-upload-server)), without a trailing slash: `http://<LAN IP>:8000` for a server on your network, or `http://loracam.nobrega.com.br` for the production server. It must be `http://`: the firmware doesn't do TLS. `UPLOAD_TOKEN` must equal the server's `UPLOAD_TOKEN`; the firmware sends it as `Authorization: Bearer …` with every upload. If the server runs inside WSL2, see [usage.md](usage.md#running-the-server-under-wsl2).
 
 ### Motion detection (on by default)
 
-The remote node sleeps and takes a picture only when a PIR sensor on GPIO6 (GPIO32 on the V2) sees movement. Wire the PIR as in [hardware.md](hardware.md#motion-sensor-pir) (V2: [hardware.md](hardware.md#heltec-v2)). Without a PIR, set `motion = 0` in the `[loracamera]` section of `platformio.ini`: the local node then asks for a picture every 10 s and the remote stays awake. Flash **both** boards after changing it. See [configuration.md](configuration.md#motion-detection-pir).
+The remote node sleeps and takes a picture only when a PIR sensor on GPIO6 (GPIO32 on the V2) sees movement. Wire the PIR as in [hardware.md](hardware.md#motion-sensor-pir) (V2: [hardware.md](hardware.md#heltec-v2)). Without a PIR, set `motion = 0` in the `[loracamera]` section of `platformio.ini`: the local node then asks for a picture every `poll_interval` seconds (default 10) and the remote stays awake. Flash **both** boards after changing `motion`. See [configuration.md](configuration.md#motion-detection-pir).
 
 ### Audio capture (optional, off by default)
 
@@ -167,19 +163,21 @@ The next step is [usage.md](usage.md).
 
 ## Bench test with two Heltec V2 boards
 
-Two V2s make a test pair: one flashed as the remote node, one as the base station. Every V2 has an OLED, and the V2 environments draw status on it by default (`display_v2 = 1`), so the boards can be followed without a serial monitor. This setup has been compiled but not yet run on hardware.
+Two V2s make a test pair: one flashed as the remote node, one as the base station. Every V2 has an OLED, and the V2 environments draw status on it by default (`display_v2 = 1`), so the boards can be followed without a serial monitor. A pair without a camera, using `test_image = 1`, has completed full 91-packet transfers on the bench.
 
 1. **USB driver.** The V2 connects through a CP2102 USB-UART. On Windows (and older macOS) install Silicon Labs' CP210x driver first; Windows may need a reboot to finish the install. Under WSL2, attach the port with `usbipd` as in [WSL2](#wsl2). On Linux it appears as `/dev/ttyUSB0` (the second board as `/dev/ttyUSB1`).
 2. **Configure for the bench.** Without a PIR, set `motion = 0` in `[loracamera]`: with the default `motion = 1` the remote goes straight to deep sleep and only a PIR wakes it. Both boards must use the same value. `sdcard = 1` is fine without a card (the base station logs `SD card not found` and carries on); set `sdcard = 0` to skip it. Create `src/local/auth.h` ([Wi-Fi credentials](#wi-fi-credentials-required)); without a reachable network the base station still runs, it just skips uploads.
 3. **Flash**, with both boards plugged in, picking each port explicitly:
    ```sh
-   pio run -e remote_v2 -t upload --upload-port /dev/ttyUSB0
-   pio run -e local_v2  -t upload --upload-port /dev/ttyUSB1
+   pio run -e remote_v2 -t upload --upload-port /dev/ttyUSB1
+   pio run -e local_v2  -t upload --upload-port /dev/ttyUSB0
    ```
+   Which board is on which port depends on the attach order; `esptool.py --port /dev/ttyUSB0 read_mac` tells them apart.
 4. **Expected screens.**
    - Remote: `Remote node`, `LoRa OK`, `Waiting for requests`.
-   - Base station: `Base station ready`, the Wi-Fi IP or `Wi-Fi not connected`, the SD card state, `Polling the remote`; about 10 s later `Requesting picture` with the attempt number.
+   - Base station: `Base station ready`, the Wi-Fi IP or the Wi-Fi problem (`Wi-Fi: SSID not found` / `Wi-Fi: not connected`), the SD card state, `Polling the remote`; `poll_interval` seconds later (10 by default) `Requesting picture` with the attempt number.
    - `Starting LoRa failed!` on either board means its radio didn't start: see [troubleshooting.md](troubleshooting.md).
-5. **Without a camera** the remote answers each request by trying the camera: its OLED shows `Taking picture...`, then `No picture`, and it announces 0 packets, so nothing crosses the link and the base station keeps requesting. This confirms both radios start and the remote hears the requests (its serial log shows `RFT received`). A full transfer, with packet progress and RSSI on both screens, needs the camera wired as in [hardware.md](hardware.md#heltec-v2).
+5. **Without a camera**, build the remote with `test_image = 1` ([configuration.md](configuration.md#test-image-no-camera)): it answers each request with a built-in 22704-byte test JPEG, so a full transfer runs end to end. You'll see packet progress and RSSI on both screens, then the base station saves the picture (`sdcard = 1`) and uploads it. With `test_image = 0` and no camera, the remote shows `No picture` and announces 0 packets, so only the request crosses the link.
+6. **Keep the boards a few metres apart.** Side by side the signal is so strong (RSSI around −27 dBm) that some packets fail their CRC (`LoRa receive error: -7`); each failure costs a 4 s retry, which roughly doubles the transfer time.
 
 All screens are listed in [configuration.md](configuration.md#oled-display).

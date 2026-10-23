@@ -136,10 +136,12 @@ Announcing picture: 12345 bytes in 50 packets
 Packet 0 was requested. byte_start is 0. content_length 12345
 ...
 Transfer done
+Cool-down: PIR disarmed for 60 s
+Cool-down over
 Sleeping until the PIR on GPIO6 sees motion
 ```
 
-On a V2 remote the last line names GPIO32, and there is no `Re-encoded …` line: it logs `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged` at boot and announces the camera JPEG's own size. The log above is the V4-R8's; the V2 camera path hasn't been run on hardware.
+The last two lines come from the brief wake-up when `motion_cooldown` ends: the remote only re-arms the PIR. On a V2 remote the last line names GPIO32, and there is no `Re-encoded …` line: it logs `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged` at boot and announces the camera JPEG's own size. The log above is the V4-R8's; the V2 camera path hasn't been run on hardware.
 
 With `motion = 0` there is no `Motion detected` line: the cycle starts at `Turning on camera` (on a timer wake-up, or right after power-on), and the last line is `Sleeping N s until the next picture` (`N` = `poll_interval`). If the camera fails, the log shows `Nothing to send` and nothing is announced. If the base station never answers, the log shows `The base station never answered; picture dropped` after ~30 s. `audio = 1` builds also log `Recording 5 seconds of audio` and `microphone: 110592 bytes in 5.00s. ...` on the audio wake-ups, and announce `Announcing audio: …`.
 

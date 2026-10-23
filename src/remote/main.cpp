@@ -20,6 +20,17 @@ static_assert(LORACAMERA_POLL_INTERVAL >= 1 && LORACAMERA_POLL_INTERVAL <= 86400
 	"poll_interval must be 1-86400 seconds");
 #endif
 
+// motion = 1: seconds the PIR stays disarmed after each capture (timer sleep), so constant
+// triggering (branches, sun-warmed surfaces) can't keep the remote taking pictures back to
+// back. 0 = re-arm the PIR right away. Set by `motion_cooldown` in [loracamera].
+#if LORACAMERA_MOTION
+#ifndef LORACAMERA_MOTION_COOLDOWN
+#define LORACAMERA_MOTION_COOLDOWN 60
+#endif
+static_assert(LORACAMERA_MOTION_COOLDOWN >= 0 && LORACAMERA_MOTION_COOLDOWN <= 86400,
+	"motion_cooldown must be 0-86400 seconds");
+#endif
+
 // Re-encoding of the camera JPEG, set in the [loracamera] section of platformio.ini.
 #ifndef LORACAMERA_JPEG_QUALITY
 #define LORACAMERA_JPEG_QUALITY 0
@@ -189,8 +200,49 @@ void turnOffCamera() {
 
 
 
+// Sleep levels for the pins, latched through deep sleep: Vext off; the camera switch LOW
+// (the boost converter's EN may be pulled up), held on its own so it also stays LOW after
+// a wake-up until setup() releases it; and the deep-sleep hold on every digital pad.
+// The radio's select line (and the V4-R8 front end) are latched by radioSleep() the same way.
+static void latchSleepPins() {
+	vextOff();
+	pinMode(CAMERA_ONOFF, OUTPUT);
+	digitalWrite(CAMERA_ONOFF, LOW);
+	gpio_hold_en((gpio_num_t)CAMERA_ONOFF);
+	gpio_deep_sleep_hold_en();
+}
+
+static void deepSleep() {
+	Serial.flush();
+	esp_deep_sleep_start();
+}
+
+#if LORACAMERA_MOTION
+// Arm the PIR as the only wake-up source and deep-sleep. Never returns.
+static void armPirAndSleep() {
+	// The pull-down keeps an unplugged PIR from waking the board; RTC pulls need the
+	// RTC peripherals powered during sleep.
+	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+	rtc_gpio_pullup_dis((gpio_num_t)MOTION_PIR);
+	rtc_gpio_pulldown_en((gpio_num_t)MOTION_PIR);
+	esp_sleep_enable_ext1_wakeup(1ULL << MOTION_PIR, ESP_EXT1_WAKEUP_ANY_HIGH);
+	Serial.printf("Sleeping until the PIR on GPIO%d sees motion\n", MOTION_PIR);
+	deepSleep();
+}
+#endif
+
 void setup() {
 	Serial.begin(115200);
+#if LORACAMERA_MOTION
+	// The end of a cool-down (the only timer wake-up with motion = 1): nothing to capture.
+	// Re-arm the PIR and sleep again without starting the radio, display or camera; the
+	// radio is still asleep with its pins latched from before the cool-down.
+	if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+		Serial.printf("Cool-down over\n");
+		latchSleepPins();
+		armPirAndSleep();
+	}
+#endif
 #if LORACAMERA_AUDIO
 	setup_i2s();
 #endif
@@ -477,47 +529,42 @@ void pushCapture() {
 #endif
 }
 
-// Power everything down and deep-sleep until the next capture: the PIR output going HIGH
-// (motion = 1) or the poll_interval timer (motion = 0). Never returns: the chip restarts
-// at setup() when it wakes.
-void sleepUntilNextCapture() {
+// Power everything down and deep-sleep until the next capture. motion = 1: the PIR wakes
+// the remote, after a motion_cooldown timer sleep if this wake-up captured something.
+// motion = 0: the poll_interval timer. Never returns: the chip restarts at setup().
+void sleepUntilNextCapture([[maybe_unused]] bool captured) {
 	radioSleep();
 	Serial1.end(); // don't drive the camera's RX line while it's unpowered
-	vextOff();
-	// The camera switch pin would float in deep sleep, and the boost converter's EN may be
-	// pulled up: hold it LOW. Digital pads also need the deep-sleep hold, which latches all
-	// of them (Vext stays off, the radio stays deselected).
-	digitalWrite(CAMERA_ONOFF, LOW);
-	gpio_hold_en((gpio_num_t)CAMERA_ONOFF);
-	gpio_deep_sleep_hold_en();
+	latchSleepPins();
 #if LORACAMERA_MOTION
-	// The pull-down keeps an unplugged PIR from waking the board; RTC pulls need the
-	// RTC peripherals powered during sleep.
-	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-	rtc_gpio_pullup_dis((gpio_num_t)MOTION_PIR);
-	rtc_gpio_pulldown_en((gpio_num_t)MOTION_PIR);
-	esp_sleep_enable_ext1_wakeup(1ULL << MOTION_PIR, ESP_EXT1_WAKEUP_ANY_HIGH);
-	Serial.printf("Sleeping until the PIR on GPIO%d sees motion\n", MOTION_PIR);
+	if(captured && LORACAMERA_MOTION_COOLDOWN > 0) {
+		esp_sleep_enable_timer_wakeup((uint64_t)LORACAMERA_MOTION_COOLDOWN * 1000000ULL);
+		Serial.printf("Cool-down: PIR disarmed for %u s\n", (unsigned)LORACAMERA_MOTION_COOLDOWN);
+		deepSleep();
+	}
+	armPirAndSleep();
 #else
 	esp_sleep_enable_timer_wakeup((uint64_t)LORACAMERA_POLL_INTERVAL * 1000000ULL);
 	Serial.printf("Sleeping %u s until the next picture\n", (unsigned)LORACAMERA_POLL_INTERVAL);
+	deepSleep();
 #endif
-	Serial.flush();
-	esp_deep_sleep_start();
 }
 
 // Runs once per wake-up.
 void loop() {
 #if LORACAMERA_MOTION
 	// After power-on or reset just arm the PIR: pictures are taken on motion only.
+	bool captured = false;
 	if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
 		Serial.printf("Motion detected\n");
 		displayShow("Motion detected");
 		pushCapture();
+		captured = true;
 	}
+	sleepUntilNextCapture(captured);
 #else
 	// Timer wake-up, or power-on: a capture right away confirms the link after installing.
 	pushCapture();
+	sleepUntilNextCapture(true);
 #endif
-	sleepUntilNextCapture();
 }

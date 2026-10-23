@@ -52,7 +52,7 @@ The full list is in RadioLib's `src/TypeDef.h`.
 - PIR sensors don't see through glass or clear plastic. Mount the lens outside the enclosure.
 
 ### `motion = 1`: pictures all the time
-- Something keeps the PIR output HIGH: moving branches, sun-warmed or wind-blown surfaces, a road, an animal sitting in view. The remote wakes again straight after each transfer while the output stays HIGH. Re-aim or mask the PIR lens, or shorten its range.
+- Something keeps the PIR output HIGH: moving branches, sun-warmed or wind-blown surfaces, a road, an animal sitting in view. The remote takes the next picture as soon as each `motion_cooldown` ends (log: `Cool-down over`, then `Motion detected`) while the output stays HIGH. Re-aim or mask the PIR lens, shorten its range, or raise `motion_cooldown` ([configuration.md](configuration.md#motion-detection-pir-and-the-timer)).
 - With nothing connected to GPIO6 (GPIO32 on a V2) the internal pull-down keeps the board asleep. If it wakes with no PIR fitted, look for a wiring fault pulling that pin up.
 - A picture or two right after power-up is the PIR settling.
 

@@ -17,9 +17,10 @@ The remote node deep-sleeps between pictures in both modes. `motion` chooses wha
 [loracamera]
 motion = 1            ; default; 0 = no PIR, wake on a timer instead
 poll_interval = 3600  ; motion = 0 only: seconds of sleep between pictures (1-86400)
+motion_cooldown = 60  ; motion = 1 only: seconds the PIR stays disarmed after each picture (0-86400)
 ```
 
-Then rebuild and reflash the **remote** node only; the base station needs nothing. The value reaches the code as `LORACAMERA_MOTION`. `poll_interval` is used only by the remote node, as `LORACAMERA_POLL_INTERVAL`, and only with `motion = 0`. The code default is `600` when it isn't set, and the build fails outside 1–86400 s.
+Then rebuild and reflash the **remote** node only; the base station needs nothing. The value reaches the code as `LORACAMERA_MOTION`. `poll_interval` is used only by the remote node, as `LORACAMERA_POLL_INTERVAL`, and only with `motion = 0`. The code default is `600` when it isn't set, and the build fails outside 1–86400 s. `motion_cooldown` is used only with `motion = 1`, as `LORACAMERA_MOTION_COOLDOWN` (code default `60`; the build fails outside 0–86400 s).
 
 | | `motion = 1` (default) | `motion = 0` |
 |---|---|---|
@@ -38,7 +39,7 @@ What happens on the remote node on each wake-up:
 1. **Power-on or reset:** with `motion = 1` it starts the radio, puts it straight back to sleep and goes to deep sleep; no picture is taken until the PIR triggers. With `motion = 0` it takes a picture right away.
 2. **PIR output goes HIGH (`motion = 1`) or the timer fires (`motion = 0`):** the chip wakes and restarts. It takes a picture (or, with `audio = 1`, every other time an audio clip), then announces it to the base station: `F9 C2` for a picture, `F9 C3` for audio. Each announcement is sent `ANNOUNCE_REPEAT` (5) times, and repeated every `ANNOUNCE_GAP_MS` (5 s) until the first packet request arrives, at most `ANNOUNCE_TRIES` (6) times. If nobody answers, the capture is dropped (`The base station never answered; picture dropped`). If the camera fails, it logs `Nothing to send`, announces nothing and goes back to sleep.
 3. It serves packet requests until the base station sends "done" (`Transfer done`), or until no request has arrived for `SERVE_IDLE_MS` (30 s).
-4. It goes back to deep sleep: until the PIR is HIGH (if it's still HIGH, it wakes again at once and takes the next picture), or for `poll_interval` seconds.
+4. It goes back to deep sleep. With `motion = 0`, for `poll_interval` seconds. With `motion = 1`, first for `motion_cooldown` seconds on the timer with the PIR **disarmed** (`Cool-down: PIR disarmed for N s`), so a PIR held HIGH by moving branches or sun-warmed surfaces can't keep the remote taking pictures back to back. When the cool-down ends the remote wakes only briefly (`Cool-down over`): without starting the radio, display or camera, it re-arms the PIR and sleeps again. If the PIR is still HIGH then, the next picture follows at once, so constant triggering gives at most one picture per `motion_cooldown` plus the ~40 s capture and transfer. `motion_cooldown = 0` re-arms the PIR straight after the transfer.
 
 The PIR pin is `MOTION_PIR` in the board header (`lib/Board/HeltecV4R8.h`: GPIO6; `lib/Board/HeltecV2.h`: GPIO32). It must be an RTC GPIO to wake the chip (0–21 on the V4-R8); the build fails otherwise. With `motion = 0` it isn't used.
 

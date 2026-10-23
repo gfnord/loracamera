@@ -65,7 +65,7 @@ Radio settings, TX power, pins and timing have working defaults. Link settings l
 
 | Option | Default | See |
 |---|---|---|
-| `motion`, `poll_interval` | `1` (PIR fitted), `3600` (used only with `motion = 0`) | [Motion detection](configuration.md#motion-detection-pir-and-the-timer) |
+| `motion`, `poll_interval`, `motion_cooldown` | `1` (PIR fitted), `3600` (used only with `motion = 0`), `60` (used only with `motion = 1`) | [Motion detection](configuration.md#motion-detection-pir-and-the-timer) |
 | `audio` | `0` | [Audio capture](configuration.md#audio-capture-optional) |
 | `display`, `display_v2` | `0` (V4-R8: no OLED), `1` (V2: OLED on) | [OLED display](configuration.md#oled-display) |
 | `sdcard` | `1` (SD card on the base station) | [SD card](configuration.md#sd-card-base-station) |

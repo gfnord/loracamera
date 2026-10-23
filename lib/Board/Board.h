@@ -23,7 +23,7 @@ constexpr uint16_t LORA_PREAMBLE = 8;
 
 // Firmware version, shown at boot on both nodes. Bump it on every release; nodes must run
 // the same protocol, so check both boards show the same version.
-#define LORACAMERA_VERSION "0.2.0"
+#define LORACAMERA_VERSION "0.3.0"
 
 // ---- Transfer protocol shared by both nodes ----
 // The remote node always starts a transfer: it wakes (timer with motion = 0, PIR with

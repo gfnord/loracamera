@@ -1,6 +1,6 @@
 # Next steps (paused 2026-10-23)
 
-Where work stopped, and what to pick up next. Last commit: `46f0ed6` (PIR cool-down), on top of tag `v0.2.0`.
+Where work stopped, and what to pick up next. Release `v0.3.0` (PIR cool-down) is the latest tag.
 
 ## Board state
 
@@ -72,7 +72,6 @@ With the jumper removed it must end on `Sleeping until the PIR ...` and stay asl
 
 ## Housekeeping
 
-- Firmware still reports `0.2.0` although `46f0ed6` adds a feature after tag `v0.2.0`: bump `LORACAMERA_VERSION` in `lib/Board/Board.h` (and tag) with the next release.
 - `test_image = 0` in `platformio.ini`: without a camera the remote has nothing to send unless flashed with the test override above.
 - Test pictures from the bench runs are on the server in `/root/loracamera/captures`; clear them with `ssh root@188.245.122.54 'rm /root/loracamera/captures/*'` when no longer needed.
 - Viewing uploads: `rsync -av root@188.245.122.54:/root/loracamera/captures/ /mnt/c/Users/gusta/OneDrive/Pictures/loracam/` (a password-protected browser gallery was offered, not started).

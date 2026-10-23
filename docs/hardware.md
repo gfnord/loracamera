@@ -9,7 +9,7 @@ Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base sta
 | Qty | Part | Notes |
 |---|---|---|
 | 2 | [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) (HTIT-WBR8H) | ESP32-S3R8 (8 MB PSRAM), 16 MB flash, SX1262, KCT8103L front end. 868–928 MHz high-power model. Sold with or without a 0.96" OLED; the firmware works either way ([configuration.md](configuration.md#oled-display)) |
-| 2 | Alternative: [Heltec WiFi LoRa 32 V2](#heltec-v2) | ESP32 (no PSRAM), 8 MB flash, SX1276, 0.96" OLED, CP2102 USB-UART. Can replace the V4-R8 on either node, or be mixed with it. Pins, wiring and limits in [Heltec V2](#heltec-v2). Compiled but untested on hardware. No solar input (the Solar row below doesn't apply) |
+| 2 | Alternative: [Heltec WiFi LoRa 32 V2](#heltec-v2) | ESP32 (no PSRAM), 8 MB flash, SX1276, 0.96" OLED, CP2102 USB-UART. Can replace the V4-R8 on either node, or be mixed with it. Pins, wiring and limits in [Heltec V2](#heltec-v2). Run as a pair on the bench without camera, PIR or SD card. No solar input (the Solar row below doesn't apply) |
 | 2 | 915 MHz LoRa antenna, IPEX (U.FL) connector | One per board. Check whether your kit includes them. Never transmit without an antenna attached |
 | 2 | LiPo cell, 3.7 V, with protection circuit | One per node. JST **SH 1.25 mm** 2-pin plug to fit the board. ≥ 3000 mAh on the remote node, larger on the base station (see [sizing](#battery-and-solar-sizing)). Check the plug polarity against the board's BAT marking before connecting: LiPo polarity isn't standardised |
 | 2 | Solar panel, 5 V nominal, 2–3 W | One per node. Output must stay within Heltec's 4.7–6 V solar-input range. JST **SH 1.25 mm** 2-pin plug to the board's SOLAR connector |
@@ -157,7 +157,7 @@ This section and its battery sizing are for the V4-R8. The V2 differs: see [Helt
 | USB-C 5 V | Development; also charges the LiPo |
 | LiPo, JST SH1.25 2-pin | 3.3–4.2 V; the remote node in the field |
 | Solar, JST SH1.25 2-pin | 4.7–6 V; charges the LiPo |
-| `Ve` pins | Switched 3.3 V output (Vext), up to 500 mA; on while the firmware runs, off while the remote node sleeps (`motion = 1`) |
+| `Ve` pins | Switched 3.3 V output (Vext), up to 500 mA; on while the firmware runs, off while the remote node sleeps |
 | `3V3` pins | Always-on 3.3 V. Powers the PIR |
 
 Current draw (datasheet, USB powered):
@@ -180,7 +180,7 @@ The camera needs **5 V**, and only while a picture is taken: about 4 s of fixed 
 
 Because the boost converter is fed from the battery only, fit the LiPo even when testing on USB.
 
-The default TX setting gives about 20 dBm at the antenna (see [configuration.md](configuration.md#tx-power)). With `motion = 1` (default) the remote node deep-sleeps between motion events: the SX1262 is put to sleep, the RF front end and Vext are switched off, and GPIO41 is held LOW so the camera stays off. With `motion = 0` it never sleeps: it stays in receive mode waiting for requests.
+The default TX setting gives about 20 dBm at the antenna (see [configuration.md](configuration.md#tx-power)). In both `motion` modes the remote node deep-sleeps between pictures: the SX1262 is put to sleep, the RF front end and Vext are switched off, and GPIO41 is held LOW so the camera stays off. It wakes on the PIR (`motion = 1`) or on a timer every `poll_interval` seconds (`motion = 0`).
 
 ### Battery and solar sizing
 
@@ -220,14 +220,18 @@ All figures are estimates from the datasheet currents above, not measurements.
 - **False triggers dominate.** One hour of continuous retriggering (~90 pictures, ~0.2 Ah) uses as much as 10 days of this budget. If the SD card shows many empty frames, re-aim or mask the PIR before buying a bigger battery.
 - These are estimates from datasheet currents: the receive and TX figures were measured by Heltec on USB power, TX at 17 dBm (the default setting gives ~20 dBm at the antenna), and the sleep current isn't measured at all. Check them with a USB power meter or a µA meter on the battery lead.
 
-**With `motion = 0`** the remote node never sleeps:
+**With `motion = 0`** the remote node also deep-sleeps between pictures, waking on a timer every `poll_interval` seconds (and taking one picture right after power-on). It no longer sits in receive mode, so the ~75 mA around the clock (~1.8 Ah per day) of the earlier polling design is gone. The daily cost is the number of pictures times the per-picture charge of the worked example below (~2.3 mAh by day, ~3.7 mAh at night), plus the sleep current (~1–2 mAh per day):
 
-- **Idle receive alone uses ~1.8 Ah per day** (75 mA around the clock).
-- **The default settings run almost continuously.** The local node asks for the next picture `poll_interval` (10 s) after the previous transfer ends, so ~1,900 pictures a day, roughly **5–8 Ah per day**. A solar panel on this board can't keep up with that.
+| `poll_interval` | Pictures a day | Charge a day [estimate] | Runtime without sun, 3000 mAh LiPo (~2400 mAh usable) [estimate] |
+|---|---|---|---|
+| `600` (10 min) | 144 | ~0.33–0.53 Ah | ~4–7 days |
+| `3600` (1 h, the `platformio.ini` default) | 24 | ~55–90 mAh | ~25–40 days |
 
-For solar operation with `motion = 0`, raise `poll_interval` in the `[loracamera]` section of `platformio.ini` and reflash the base station. At one picture every 10 minutes (`poll_interval = 600`) the remote needs about 2.2 Ah per day, which a 2–3 W panel covers on sunny days. A 3000 mAh cell then bridges about a day without sun; use a larger one for longer cloudy spells.
+The picture count is `86400 / poll_interval`; since `poll_interval` is the sleep after each capture and transfer ends (about a minute), the real count is a little lower. The runtime column adds ~2–3 mAh a day of self-discharge. A 2–3 W panel covers either row on sunny days; use a larger cell to bridge longer cloudy spells. As with `motion = 1`, these are estimates from datasheet currents: the timer mode has run on two Heltec V2 boards, but no current has been measured.
 
-**Base station.** It never sleeps: with `motion = 1` it has to be listening whenever the remote announces a picture, and with `motion = 0` it drives the polling. LoRa receive (~75 mA) plus Wi-Fi. The firmware keeps Wi-Fi connected with the core's default modem-sleep power saving, which adds on average a few tens of mA [estimate]; active transmission draws 120–170 mA. SD writes are brief. That puts the base station around **2.5–3.5 Ah per day** [estimate], at or above the ~2.7 Ah a solar panel can put back through the charger. So:
+Pick `poll_interval` from the battery budget: charge a day ≈ (86400 / `poll_interval`) × 2.3–3.7 mAh + 1–2 mAh.
+
+**Base station.** It never sleeps: it always listens, because the remote can announce a picture at any moment (PIR or timer), and it never transmits except to request packets and send "done". LoRa receive (~75 mA) plus Wi-Fi. The firmware keeps Wi-Fi connected with the core's default modem-sleep power saving, which adds on average a few tens of mA [estimate]; active transmission draws 120–170 mA. SD writes are brief. That puts the base station around **2.5–3.5 Ah per day** [estimate], at or above the ~2.7 Ah a solar panel can put back through the charger. So:
 
 - use a larger cell (6000 mAh or more) to ride out cloudy days, and expect the battery to run down slowly in poor weather;
 - if Wi-Fi isn't reachable, the driver keeps retrying in the background, which costs power without uploading anything;
@@ -235,7 +239,7 @@ For solar operation with `motion = 0`, raise `poll_interval` in the `[loracamera
 
 ## Heltec V2
 
-The Heltec WiFi LoRa 32 V2 can run either node, alone or mixed with a V4-R8 (e.g. V2 remote + V4-R8 local; same link settings, and sync word 0x12 is the same on air for the SX1262 and SX1276). **Compiled but untested on hardware**, as are mixed pairs. Build and flash with the `remote_v2` and `local_v2` environments (`pio run -e remote_v2 -t upload`, `pio run -e local_v2 -t upload`); plain `pio run` builds only the V4-R8 environments. Pins are defined in `lib/Board/HeltecV2.h`. The wiring diagrams in `docs/images` are V4-R8 only. This page refers to V2 pins by GPIO number only.
+The Heltec WiFi LoRa 32 V2 can run either node, alone or mixed with a V4-R8 (e.g. V2 remote + V4-R8 local; same link settings, and sync word 0x12 is the same on air for the SX1262 and SX1276). **Run as a pair on the bench**: LoRa link, OLED, Wi-Fi upload, deep sleep with timer wake-ups (`motion = 0`) and the built-in test picture work; the camera, PIR wake-up, SD card and audio haven't been run on a V2 yet, nor have mixed pairs. Build and flash with the `remote_v2` and `local_v2` environments (`pio run -e remote_v2 -t upload`, `pio run -e local_v2 -t upload`); plain `pio run` builds only the V4-R8 environments. Pins are defined in `lib/Board/HeltecV2.h`. The wiring diagrams in `docs/images` are V4-R8 only. This page refers to V2 pins by GPIO number only.
 
 | Item | V2 |
 |---|---|
@@ -319,10 +323,10 @@ A V2 transmits about 3 dB less than a V4-R8 at its default (~20 dBm at the anten
 - **Transfer buffer: `MAX_TRANSFER_BUFFER` = 72000 bytes (288 packets of 250)**, against 125000 on the V4-R8. With the V4-R8's size the V2 local node overflowed DRAM by 48800 B at build time.
 - **Remote:** the camera JPEG is read straight into the transfer buffer and sent unchanged. `jpeg_quality` and `night_grayscale` are ignored (boot log: `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`). Re-encoding needs a full-frame pixel buffer (640×480×3 ≈ 920 KB) that only fits in PSRAM.
 - **Pictures over 72000 bytes** are dropped with `Can't read a N-byte frame into the 72000-byte camera buffer`. To shrink camera JPEGs, raise `camera_compression` (camera-side).
-- **Local:** a V2 local node works with V4-R8 remotes (re-encoded pictures are 10–20 KB) and V2 remotes. If an announced picture needs more packets than fit the local buffer (V4-R8 remote at 125000 bytes to a V2 local at 72000), the local node logs `N packets don't fit this board's M-byte buffer; skipped`, requests nothing and, with `motion = 1`, still sends "done" (F9 FA) so the remote sleeps.
+- **Local:** a V2 local node works with V4-R8 remotes (re-encoded pictures are 10–20 KB) and V2 remotes. If an announced picture needs more packets than fit the local buffer (V4-R8 remote at 125000 bytes to a V2 local at 72000), the local node logs `N packets don't fit this board's M-byte buffer; skipped`, requests nothing and still sends "done" (F9 FA) so the remote sleeps.
 
 ### V2 power
 
 - The V2 has a LiPo connector (JST 1.25) with charger but **no solar input** (a V4 feature). A solar panel needs an external charge controller.
 - The [Power](#power) section and the battery sizing above are for the V4-R8 and **do not apply** to the V2: it has a CP2102 and an older regulator. The V2's deep-sleep current has **not been measured**; don't assume the V4-R8 figures.
-- With `motion = 1` the V2 remote holds `CAMERA_ONOFF` (GPIO22) LOW, the SX1276 NSS (GPIO18) HIGH and Vext off through deep sleep.
+- The V2 remote holds `CAMERA_ONOFF` (GPIO22) LOW, the SX1276 NSS (GPIO18) HIGH and Vext off through deep sleep.

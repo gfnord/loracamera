@@ -4,8 +4,8 @@ The project is a [PlatformIO](https://platformio.org/) project using the Arduino
 
 | Environment | Board | Node | Source |
 |---|---|---|---|
-| `local` | Heltec V4-R8 | Near Wi-Fi; receives the pictures (or requests them, with `motion = 0`) and uploads them | `src/local/` |
-| `remote` | Heltec V4-R8 | In the field; PIR-triggered camera (+ microphone if audio is enabled, with `motion = 0`) | `src/remote/` |
+| `local` | Heltec V4-R8 | Near Wi-Fi, the base station; always listens, receives the pictures the remote sends and uploads them | `src/local/` |
+| `remote` | Heltec V4-R8 | In the field; deep-sleeps, wakes on a PIR or a timer to take a picture and push it (+ microphone if audio is enabled, with `motion = 0`) | `src/remote/` |
 | `local_v2` | Heltec WiFi LoRa 32 V2 | Same as `local` | `src/local/` |
 | `remote_v2` | Heltec WiFi LoRa 32 V2 | Same as `remote` | `src/remote/` |
 
@@ -53,19 +53,19 @@ The `local` and `local_v2` environments won't compile without this file, and sto
 
 ### Motion detection (on by default)
 
-The remote node sleeps and takes a picture only when a PIR sensor on GPIO6 (GPIO32 on the V2) sees movement. Wire the PIR as in [hardware.md](hardware.md#motion-sensor-pir) (V2: [hardware.md](hardware.md#heltec-v2)). Without a PIR, set `motion = 0` in the `[loracamera]` section of `platformio.ini`: the local node then asks for a picture every `poll_interval` seconds (default 10) and the remote stays awake. Flash **both** boards after changing `motion`. See [configuration.md](configuration.md#motion-detection-pir).
+The remote node deep-sleeps between pictures and starts every transfer itself; the base station only listens. By default (`motion = 1`) a PIR sensor on GPIO6 (GPIO32 on the V2) wakes it when it sees movement. Wire the PIR as in [hardware.md](hardware.md#motion-sensor-pir) (V2: [hardware.md](hardware.md#heltec-v2)). Without a PIR, set `motion = 0` in the `[loracamera]` section of `platformio.ini`: the remote then takes a picture right after power-on and wakes on a timer every `poll_interval` seconds (1–86400). Only the **remote** needs reflashing after changing `motion` or `poll_interval`. See [configuration.md](configuration.md#motion-detection-pir-and-the-timer).
 
 ### Audio capture (optional, off by default)
 
-The firmware sends pictures only. To also capture microphone audio, set `audio = 1` and `motion = 0` in the `[loracamera]` section of `platformio.ini`, wire the microphone, and flash **both** boards. See [configuration.md](configuration.md#audio-capture-optional).
+The firmware sends pictures only. To also capture microphone audio, set `audio = 1` and `motion = 0` in the `[loracamera]` section of `platformio.ini`, wire the microphone, and flash the **remote**; the base station needs no change. See [configuration.md](configuration.md#audio-capture-optional).
 
 ### Everything else
 
-Radio settings, TX power, pins and timing have working defaults. Link settings live in one shared header (`lib/Board/Board.h`), so both nodes always match, whichever board they use. The `[loracamera]` section of `platformio.ini` (it applies to every environment) holds the project options:
+Radio settings, TX power, pins and timing have working defaults. Link settings live in one shared header (`lib/Board/Board.h`), so both nodes always match, whichever board they use. The `[loracamera]` section of `platformio.ini` (it applies to every environment) holds the project options. `motion`, `poll_interval`, `audio`, `test_image` and the camera options only change the remote node: reflash the remote only. Both nodes must run the same protocol version (a base station on older firmware won't answer the remote's announcements).
 
 | Option | Default | See |
 |---|---|---|
-| `motion` | `1` (PIR fitted) | [Motion detection](configuration.md#motion-detection-pir) |
+| `motion`, `poll_interval` | `1` (PIR fitted), `3600` (used only with `motion = 0`) | [Motion detection](configuration.md#motion-detection-pir-and-the-timer) |
 | `audio` | `0` | [Audio capture](configuration.md#audio-capture-optional) |
 | `display`, `display_v2` | `0` (V4-R8: no OLED), `1` (V2: OLED on) | [OLED display](configuration.md#oled-display) |
 | `sdcard` | `1` (SD card on the base station) | [SD card](configuration.md#sd-card-base-station) |
@@ -142,7 +142,7 @@ pio run -e local -t upload --upload-port /dev/ttyACM1
 
 On a V2 the CP2102 normally resets the board into download mode by itself; if it doesn't, hold **PRG**, press and release **RST**, release **PRG**, and upload again.
 
-On a V4-R8, put the board in download mode by hand. A remote node already running `motion = 1` firmware sleeps with its USB port gone, so it always needs this:
+On a V4-R8, put the board in download mode by hand. A remote node sleeps with its USB port gone (in both `motion` modes), so it always needs this:
 
 1. Hold **PRG**.
 2. Press and release **RST**.
@@ -157,16 +157,16 @@ pio device monitor                      # 115200 baud; the baud rate is ignored 
 pio device monitor -p /dev/ttyACM1      # V2: -p /dev/ttyUSB0
 ```
 
-Native USB (V4-R8) re-enumerates on reset, so the monitor may lose output from the first moments after boot. Press RST with the monitor open, or reconnect it, to see the boot messages. A remote node with `motion = 1` goes to sleep right after boot and comes back only when the PIR triggers; on a V4-R8 the monitor reconnects each time (under WSL2, attach with `--auto-attach`). A V2's CP2102 keeps its port while the board sleeps, so the monitor stays connected.
+Native USB (V4-R8) re-enumerates on reset, so the monitor may lose output from the first moments after boot. Press RST with the monitor open, or reconnect it, to see the boot messages. The remote node goes to deep sleep after each picture and comes back when the PIR triggers (`motion = 1`) or its timer fires (`motion = 0`); on a V4-R8 the monitor reconnects each time (under WSL2, attach with `--auto-attach`). A V2's CP2102 keeps its port while the board sleeps, so the monitor stays connected.
 
 The next step is [usage.md](usage.md).
 
 ## Bench test with two Heltec V2 boards
 
-Two V2s make a test pair: one flashed as the remote node, one as the base station. Every V2 has an OLED, and the V2 environments draw status on it by default (`display_v2 = 1`), so the boards can be followed without a serial monitor. A pair without a camera, using `test_image = 1`, has completed full 91-packet transfers on the bench.
+Two V2s make a test pair: one flashed as the remote node, one as the base station. Every V2 has an OLED, and the V2 environments draw status on it by default (`display_v2 = 1`), so the boards can be followed without a serial monitor. A pair without a camera, using `test_image = 1` and `motion = 0`, has run this on the bench: the remote pushed the 91-packet test picture right after power-on, slept 60 s, woke on its timer and pushed again; both pictures were uploaded intact.
 
 1. **USB driver.** The V2 connects through a CP2102 USB-UART. On Windows (and older macOS) install Silicon Labs' CP210x driver first; Windows may need a reboot to finish the install. Under WSL2, attach the port with `usbipd` as in [WSL2](#wsl2). On Linux it appears as `/dev/ttyUSB0` (the second board as `/dev/ttyUSB1`).
-2. **Configure for the bench.** Without a PIR, set `motion = 0` in `[loracamera]`: with the default `motion = 1` the remote goes straight to deep sleep and only a PIR wakes it. Both boards must use the same value. `sdcard = 1` is fine without a card (the base station logs `SD card not found` and carries on); set `sdcard = 0` to skip it. Create `src/local/auth.h` ([Wi-Fi credentials](#wi-fi-credentials-required)); without a reachable network the base station still runs, it just skips uploads.
+2. **Configure for the bench.** Set `motion` in `[loracamera]` on the remote only: with `motion = 0` (no PIR) the remote pushes a picture right after power-on and then every `poll_interval` seconds, so set a short `poll_interval`, such as `60`, for the bench (the default is 3600). With the default `motion = 1` it deep-sleeps until its PIR fires; with no PIR, jumper GPIO32 to 3V3 for about 1 s to simulate motion (not yet run on hardware). The base station ignores all of these. `sdcard = 1` is fine without a card (the base station logs `SD card not found` and carries on); set `sdcard = 0` to skip it. Create `src/local/auth.h` ([Wi-Fi credentials](#wi-fi-credentials-required)); without a reachable network the base station still runs, it just skips uploads.
 3. **Flash**, with both boards plugged in, picking each port explicitly:
    ```sh
    pio run -e remote_v2 -t upload --upload-port /dev/ttyUSB1
@@ -174,10 +174,12 @@ Two V2s make a test pair: one flashed as the remote node, one as the base statio
    ```
    Which board is on which port depends on the attach order; `esptool.py --port /dev/ttyUSB0 read_mac` tells them apart.
 4. **Expected screens.**
-   - Remote: `Remote node`, `LoRa OK`, `Waiting for requests`.
-   - Base station: `Base station ready`, the Wi-Fi IP or the Wi-Fi problem (`Wi-Fi: SSID not found` / `Wi-Fi: not connected`), the SD card state, `Polling the remote`; `poll_interval` seconds later (10 by default) `Requesting picture` with the attempt number.
+   - Remote: `- Remote Station -`, `Ready`, `LoRa OK`, then `Wakes every N s` (`motion = 0`) or `Sleeps until motion` (`motion = 1`). With `motion = 0` it then shows `Taking picture...` and `Announcing`, `picture`, `N packets`; with `motion = 1` that follows `Motion detected` when the PIR triggers. After the transfer it shows `Transfer done`.
+   - Base station: `- Base Station -`, `Ready`, the Wi-Fi IP or the Wi-Fi problem (`Wi-Fi: SSID not found` / `Wi-Fi: not connected`), the SD card state, `Listening for remote`. When the remote announces a picture it shows `Receiving` with the packet progress and RSSI, then `Received`.
+   - With `motion = 0` the base station logs `Picture announced, N packets` right after the remote powers on (boot, then the capture, about half a minute with a camera), and again every `poll_interval` seconds plus the capture and transfer time.
+   - The top line names the role the board was flashed with. The two V2s are identical, so if the boards seem swapped, trust the top line (or `esptool.py read_mac` on each port), not their position on the desk.
    - `Starting LoRa failed!` on either board means its radio didn't start: see [troubleshooting.md](troubleshooting.md).
-5. **Without a camera**, build the remote with `test_image = 1` ([configuration.md](configuration.md#test-image-no-camera)): it answers each request with a built-in 22704-byte test JPEG, so a full transfer runs end to end. You'll see packet progress and RSSI on both screens, then the base station saves the picture (`sdcard = 1`) and uploads it. With `test_image = 0` and no camera, the remote shows `No picture` and announces 0 packets, so only the request crosses the link.
+5. **Without a camera**, build the remote with `test_image = 1` ([configuration.md](configuration.md#test-image-no-camera)) and reflash the remote only: it pushes a built-in 22704-byte test JPEG in place of each capture, so a full transfer runs end to end. You'll see packet progress and RSSI on both screens, then the base station saves the picture (`sdcard = 1`) and uploads it. With `test_image = 0` and no camera, the remote shows `No picture`, logs `Nothing to send` and announces nothing, so nothing crosses the link.
 6. **Keep the boards a few metres apart.** Side by side the signal is so strong (RSSI around −27 dBm) that some packets fail their CRC (`LoRa receive error: -7`); each failure costs a 4 s retry, which roughly doubles the transfer time.
 
 All screens are listed in [configuration.md](configuration.md#oled-display).

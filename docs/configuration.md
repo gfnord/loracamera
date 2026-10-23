@@ -1,6 +1,6 @@
 # Configuration reference
 
-All settings are compile-time. Change them, rebuild, and reflash. The link settings and protocol constants are shared by every board and live in `lib/Board/Board.h`. Per-board values (pins, TX power, TCXO, transfer buffer size) live in `lib/Board/HeltecV4R8.h` and `lib/Board/HeltecV2.h`; the build picks one by environment. **`audio` and `motion` in the `[loracamera]` section of `platformio.ini` and the settings in `lib/Board/Board.h` are shared: reflash both boards after changing any of them.** `display` / `display_v2` affect whichever node they're flashed to, `sdcard` only the local node, and the camera settings only the remote node.
+All settings are compile-time. Change them, rebuild, and reflash. The link settings and protocol constants are shared by every board and live in `lib/Board/Board.h`. Per-board values (pins, TX power, TCXO, transfer buffer size) live in `lib/Board/HeltecV4R8.h` and `lib/Board/HeltecV2.h`; the build picks one by environment. **The options in the `[loracamera]` section of `platformio.ini` (`audio`, `motion`, `poll_interval`, `test_image` and the camera settings) now only affect the remote node: reflash the remote only.** The base station always listens and ignores them. The settings in `lib/Board/Board.h` are shared: after changing one of those, reflash both boards, and both nodes must run the same protocol version. `display` / `display_v2` affect whichever node they're flashed to, `sdcard` only the base station, and the camera settings only the remote node.
 
 | Environment | Board | Node |
 |---|---|---|
@@ -9,38 +9,42 @@ All settings are compile-time. Change them, rebuild, and reflash. The link setti
 
 The boards can be mixed (for example a V2 remote with a V4-R8 local node): the link settings and sync word are the same on air for the SX1262 and the SX1276. The V2 and mixed pairs have only been compiled, **not tested on hardware**. The `[loracamera]` options apply to every environment.
 
-## Motion detection (PIR)
+## Motion detection (PIR) and the timer
 
-Motion detection is **on by default**: the remote node sleeps and takes a picture only when its PIR sensor sees movement. Set in `platformio.ini`:
+The remote node deep-sleeps between pictures in both modes. `motion` chooses what wakes it. Set in `platformio.ini`:
 
 ```ini
 [loracamera]
-motion = 1          ; default; 0 = no PIR, the local node polls for a picture
-poll_interval = 10  ; motion = 0 only: seconds between the end of one transfer and the next request
+motion = 1            ; default; 0 = no PIR, wake on a timer instead
+poll_interval = 3600  ; motion = 0 only: seconds of sleep between pictures (1-86400)
 ```
 
-Then rebuild and reflash **both** boards: the two values use different protocols ([protocol.md](protocol.md#motion-mode-motion--1)). The value reaches the code as `LORACAMERA_MOTION`. `poll_interval` (0–86400) is used only by the local node, so changing it needs only the base station reflashed; it reaches the code as `LORACAMERA_POLL_INTERVAL` and sets `CHECK_EVERY_MS` in `src/local/main.cpp`. After a request that brings no transfer back (no answer, or the camera failed), the interval counts from when that request was sent.
+Then rebuild and reflash the **remote** node only; the base station needs nothing. The value reaches the code as `LORACAMERA_MOTION`. `poll_interval` is used only by the remote node, as `LORACAMERA_POLL_INTERVAL`, and only with `motion = 0`. The code default is `600` when it isn't set, and the build fails outside 1–86400 s.
 
 | | `motion = 1` (default) | `motion = 0` |
 |---|---|---|
-| Who starts a transfer | the remote node, when the PIR triggers | the local node, `poll_interval` seconds after the last transfer |
-| Remote node between pictures | deep sleep (radio asleep, front end, Vext and camera off) | awake in receive mode (~75 mA) |
-| Local node | listens for announcements, never transmits on its own | sends a request `poll_interval` seconds after the last transfer |
+| Who starts a transfer | the remote node, always | the remote node, always |
+| What wakes the remote | PIR output HIGH | deep-sleep timer, every `poll_interval` seconds |
+| Remote at power-on or reset | arms the PIR, takes no picture | takes one picture at once, then sleeps (confirms the link after installing) |
+| Remote node between pictures | deep sleep (radio asleep, front end, Vext and camera off) | the same deep sleep |
+| Base station | always listens, never transmits on its own | the same |
 | PIR wiring | V4-R8: GPIO6 + 3V3 + GND ([hardware.md](hardware.md#motion-sensor-pir)); V2: GPIO32 + 3V3 + GND ([hardware.md](hardware.md#heltec-v2)) | not needed |
 | Audio | not available (`audio = 1` fails the build) | optional |
 
-What happens on the remote node with `motion = 1`:
+`poll_interval` is the sleep after each capture or transfer ends, so the pictures are a little more than `poll_interval` seconds apart: add the capture and transfer time (about 1 min for a re-encoded picture). What a shorter interval costs in battery is in [hardware.md](hardware.md#power).
 
-1. **Power-on or reset:** it starts the radio, puts it straight back to sleep and goes to deep sleep. No picture is taken until the PIR triggers.
-2. **PIR output goes HIGH:** the chip wakes and restarts. It takes a picture (same capture and re-encoding as before), then announces it to the local node, repeating the announcement every `MOTION_ANNOUNCE_GAP_MS` (5 s) until the first packet request arrives, at most `MOTION_ANNOUNCE_TRIES` (6) times. If nobody answers, the picture is dropped.
-3. It serves packet requests until the local node sends "done", or until no request has arrived for `MOTION_SERVE_IDLE_MS` (30 s).
-4. It goes back to deep sleep. If the PIR output is still HIGH, it wakes again at once and takes the next picture.
+What happens on the remote node on each wake-up:
 
-The PIR pin is `MOTION_PIR` in the board header (`lib/Board/HeltecV4R8.h`: GPIO6; `lib/Board/HeltecV2.h`: GPIO32). It must be an RTC GPIO to wake the chip (0–21 on the V4-R8); the build fails otherwise.
+1. **Power-on or reset:** with `motion = 1` it starts the radio, puts it straight back to sleep and goes to deep sleep; no picture is taken until the PIR triggers. With `motion = 0` it takes a picture right away.
+2. **PIR output goes HIGH (`motion = 1`) or the timer fires (`motion = 0`):** the chip wakes and restarts. It takes a picture (or, with `audio = 1`, every other time an audio clip), then announces it to the base station: `F9 C2` for a picture, `F9 C3` for audio. Each announcement is sent `ANNOUNCE_REPEAT` (5) times, and repeated every `ANNOUNCE_GAP_MS` (5 s) until the first packet request arrives, at most `ANNOUNCE_TRIES` (6) times. If nobody answers, the capture is dropped (`The base station never answered; picture dropped`). If the camera fails, it logs `Nothing to send`, announces nothing and goes back to sleep.
+3. It serves packet requests until the base station sends "done" (`Transfer done`), or until no request has arrived for `SERVE_IDLE_MS` (30 s).
+4. It goes back to deep sleep: until the PIR is HIGH (if it's still HIGH, it wakes again at once and takes the next picture), or for `poll_interval` seconds.
+
+The PIR pin is `MOTION_PIR` in the board header (`lib/Board/HeltecV4R8.h`: GPIO6; `lib/Board/HeltecV2.h`: GPIO32). It must be an RTC GPIO to wake the chip (0–21 on the V4-R8); the build fails otherwise. With `motion = 0` it isn't used.
 
 ## Audio capture (optional)
 
-Audio is **off by default**, so the link carries only pictures. Audio needs the polling mode, so to build both nodes with microphone support set this in `platformio.ini`:
+Audio is **off by default**, so the link carries only pictures. Audio needs the timer mode (`motion = 0`), so to build the remote node with microphone support set this in `platformio.ini`:
 
 ```ini
 [loracamera]
@@ -48,17 +52,18 @@ audio = 1
 motion = 0
 ```
 
-Then rebuild and reflash **both** boards. The value reaches the code as the `LORACAMERA_AUDIO` macro (`-DLORACAMERA_AUDIO=${loracamera.audio}`). `audio = 1` with `motion = 1` fails the build (`motion = 1 needs audio = 0`): the remote node has no way to announce audio, and on the V4-R8 the microphone's data pin is the PIR pin. The V2 mic and PIR use separate pins, but the rule is the same.
+Then rebuild and reflash the **remote** node; the base station needs no change. The value reaches the code as the `LORACAMERA_AUDIO` macro (`-DLORACAMERA_AUDIO=${loracamera.audio}`). `audio = 1` with `motion = 1` fails the build (`motion = 1 needs audio = 0`): audio goes with the timer wake-ups, and on the V4-R8 the microphone's data pin is the PIR pin. The V2 mic and PIR use separate pins, but the rule is the same.
 
 | | `audio = 0` (default) | `audio = 1` |
 |---|---|---|
-| Local node requests | pictures only | pictures and audio, alternating |
-| Remote node | camera only; I2S driver and recording code are not compiled in; `F9 FD` requests are ignored | also records `AUDIO_SECONDS` of audio on `F9 FD` |
+| What the remote announces | pictures only (`F9 C2`) | pictures (`F9 C2`) and audio (`F9 C3`), alternating, one per wake-up |
+| Remote node | camera only; I2S driver and recording code are not compiled in | also records `AUDIO_SECONDS` of audio on every other wake-up |
+| Base station | accepts either announcement | the same; uploads audio to `/audio.raw` and saves `.raw` on the SD card |
 | Microphone wiring | not needed | V4-R8: GPIO3/4/6, see [hardware.md](hardware.md#remote-node-wiring). V2: GPIO12/13/39, see [hardware.md](hardware.md#heltec-v2) |
 | Uploads | `/image.jpg` | `/image.jpg` and `/audio.raw` |
 | Cycle time (SF7) | a 48 KB camera JPEG ≈ 46 s, a re-encoded 10–20 KB one ≈ 10–20 s | adds ≈ 1.8 min of airtime for every 5 s clip (≈ 110 KB) |
 
-Both nodes must be built with the same value. A local node built with audio sends `F9 FD` requests that a picture-only remote node never answers. The local node then waits out its retries (up to ~100 min) instead of fetching pictures.
+The remote starts with a picture after power-on, then alternates picture, audio, picture… one per wake-up. The state is kept in RTC memory, which survives deep sleep, and flips only after a transfer completes: a dropped announcement or a failed capture repeats the same type next time. The base station needs no matching setting: it takes the type from the announcement.
 
 The default 5 s clip is 110250 bytes: it fits the V4-R8 buffer (125000) but not the V2 buffer (72000). On a V2 remote the recording stops when the transfer buffer is full and logs `Audio buffer full (72000 bytes), clip cut short`, so the clip is cut at 72000 bytes (≈ 3.2 s at 11025 Hz); nothing overruns memory. To avoid the cut, set `AUDIO_SECONDS` so that `SAMPLE_RATE × AUDIO_SECONDS × 2` stays below 72000 (3 s = 66150 bytes). Audio on the V2 is untested.
 
@@ -80,21 +85,23 @@ Rebuild and reflash the boards of that type. The value reaches the code as `LORA
 | OLED driver (ThingPulse SSD1306) | not compiled in | linked; resets the OLED and drives it over I2C: V4-R8 reset GPIO21, I2C GPIO17/18; V2 reset GPIO16, I2C SDA GPIO4 / SCL GPIO15 |
 | OLED pins | V4-R8: GPIO17, 18, 21 free. V2: GPIO4, 15, 16 free | V4-R8: GPIO17, 18, 21 used. V2: GPIO4, 15, 16 used |
 
-What the screens show:
+Every screen starts with the station's role, centred on the top line: **`- Base Station -`** on the local node, **`- Remote Station -`** on the remote node. Both boards can be the same model, and the role is set only by the firmware flashed (`local*` or `remote*` environment), so this line is how to tell them apart. Up to four status lines follow:
 
-| Node | When | Screen |
+| Node | When | Status lines |
 |---|---|---|
-| both | boot | `Base station` / `Remote node`, `Starting LoRa...`, or `Starting LoRa failed!` |
-| local | ready | `Base station ready`, Wi-Fi IP, `Wi-Fi: SSID not found` or `Wi-Fi: not connected`, SD card state (with `sdcard = 1`), `Waiting for motion` or `Polling the remote` |
-| local | `motion = 0`, asking | `Requesting picture` (or `audio`), attempt number |
+| both | boot | `Starting LoRa...` and `Firmware <version>` (`LORACAMERA_VERSION` in `lib/Board/Board.h`), or `Starting LoRa failed!` |
+| local | ready | `Ready`, Wi-Fi IP, `Wi-Fi: SSID not found` or `Wi-Fi: not connected`, SD card state (with `sdcard = 1`), `Listening for remote` |
 | local | receiving | `Receiving`, `i / n [%]`, RSSI of the last data packet |
 | local | after a transfer | `Received`, size and time, `Saved to SD card` / `SD card save failed`, `Uploaded` / `Upload failed` / `Upload skipped: no Wi-Fi`; or `Nothing received` (with `Too big for this board` if the file didn't fit) |
-| remote | ready | `LoRa OK`, `Waiting for requests` (`motion = 0`) or `Sleeps until motion` |
-| remote | capturing | `Motion detected`, `Taking picture...` (`Test image...` with `test_image = 1`), `Recording audio`; then `Picture ready` with the size, or `No picture` (no camera answer: check the serial log) |
-| remote | sending | `Announcing` and the packet count; then `Sending`, `i / n`, RSSI of the request (redrawn at most every 250 ms so the drawing doesn't slow the transfer) |
-| remote | `motion = 1`, end | `Transfer done` or `No answer from the base station`; the screen goes dark when Vext is switched off for deep sleep |
+| remote | ready | `Ready`, `LoRa OK`, `Wakes every N s` (`motion = 0`) or `Sleeps until motion` (`motion = 1`) |
+| remote | capturing | `Motion detected` (`motion = 1` only), `Taking picture...` (`Test image...` with `test_image = 1`), `Recording audio`; then `Picture ready` with the size, or `No picture` (no camera answer: check the serial log) |
+| remote | announcing | `Announcing`, `picture` or `audio`, and the packet count (`N packets`) |
+| remote | sending | `Sending`, `i / n`, RSSI of the request (redrawn at most every 250 ms so the drawing doesn't slow the transfer) |
+| remote | end | `Transfer done` or `No answer from the base station`; the screen goes dark when Vext is switched off for deep sleep |
 
-Vext is switched on either way while the board is awake, because it also powers the `Ve` header pins (V4-R8: GPIO40; V2: GPIO21, LOW = on). On a `motion = 1` remote the OLED is only on while the board is awake. The remote's OLED code hasn't been run on hardware.
+The remote node always starts a transfer ([Motion detection](#motion-detection-pir-and-the-timer)): it wakes on the PIR or its timer and announces the capture (`Announcing`), and the base station only listens (`Listening for remote`) and then collects it (`Receiving`).
+
+Vext is switched on either way while the board is awake, because it also powers the `Ve` header pins (V4-R8: GPIO40; V2: GPIO21, LOW = on). On the remote the OLED is only on while the board is awake. Both nodes' screens have run on Heltec V2 boards; the V4-R8 display hasn't been run on hardware.
 
 ## SD card (base station)
 
@@ -117,7 +124,7 @@ How it behaves:
 - **Timestamps:** once Wi-Fi has been up, the clock is set from NTP (`pool.ntp.org`, UTC), and every file's modification time on the card is correct. If Wi-Fi hasn't been up since boot, files carry an arbitrary date; the numbering still gives the order.
 - **Missing or removed card:** the base station keeps working and logs `SD card not found`. Each new file retries the mount, so a card inserted later is picked up without a reboot.
 - **Full card:** the file isn't saved (`SD card full`), and it's still uploaded if Wi-Fi is up.
-- **Incomplete transfers:** if a packet was skipped after all retries, the shorter, damaged file is saved and uploaded as received, same as before.
+- **Incomplete transfers:** if the remote stopped answering mid-transfer (`Remote stopped answering; abandoning the transfer at packet N`), the truncated file is saved and uploaded as received.
 - **Wiring:** the SD pins are `SD_CS`, `SD_SCK`, `SD_MISO` and `SD_MOSI` in the board header (`lib/Board/HeltecV4R8.h` or `lib/Board/HeltecV2.h`).
 
 ## Radio link
@@ -174,7 +181,7 @@ At its default the V2 transmits about 3 dB less than a V4-R8 at its default (≈
 
 ### Range vs. speed
 
-Airtime for one full data packet (252 bytes, explicit header, CRC on, CR 4/5). Transfer times also count the request packet and the protocol's polling and turnaround time (see [protocol.md](protocol.md#throughput)), assuming no retries:
+Airtime for one full data packet (252 bytes, explicit header, CRC on, CR 4/5). Transfer times also count the request packet and the protocol's turnaround time (see [protocol.md](protocol.md#throughput)), assuming no retries:
 
 | SF / BW | Data packet airtime | ≈ 48 KB JPEG (192 packets) | ≈ 20 KB re-encoded JPEG (80 packets) | ≈ 5 s audio (442 packets) |
 |---|---|---|---|---|
@@ -184,23 +191,27 @@ Airtime for one full data packet (252 bytes, explicit header, CRC on, CR 4/5). T
 
 These are calculated with the Semtech airtime formula, not measured.
 
-**Limit:** the local node waits `RESPONSE_TIMER` × 20 ms ≈ 4 s for each data packet. The remote node's poll interval and 5 ms turnaround guard plus the data packet airtime must fit in that window. That rules out SF11 and SF12 at 125 kHz (≈ 4.9 s and 9 s per packet) unless you lengthen the window by raising the `delay(20)` inside the response loop of `handle_packets()`. `RESPONSE_TIMER` is a `uint8_t` and can't go above 255. RadioLib enables low-data-rate optimisation automatically where the radio needs it (SF11/SF12 at 125 kHz).
+**Limit:** the base station waits `RESPONSE_TIMER` × 20 ms ≈ 4 s for each data packet. The remote node's 20 ms loop delay and 5 ms turnaround guard plus the data packet airtime must fit in that window. That rules out SF11 and SF12 at 125 kHz (≈ 4.9 s and 9 s per packet) unless you lengthen the window by raising the `delay(20)` inside the response loop of `handle_packets()`. `RESPONSE_TIMER` is a `uint8_t` and can't go above 255. RadioLib enables low-data-rate optimisation automatically where the radio needs it (SF11/SF12 at 125 kHz).
 
 ## Transfer protocol
 
-Shared constants are in `lib/Board/Board.h`; `MAX_TRANSFER_BUFFER` is per board.
+Shared constants are in `lib/Board/Board.h`; `MAX_TRANSFER_BUFFER` is per board. The packet formats and the timing are in [protocol.md](protocol.md).
 
 | Constant | Default | Meaning |
 |---|---|---|
 | `MAX_TRANSFER_BUFFER` | V4-R8 `125000` (500 packets), V2 `72000` (288 packets) | Size of the capture/receive buffer on each node (bytes), set in the board header. Captures must fit. Must be a multiple of `LORA_TRANSFER_BUFFER` (250), checked at build time. The V2's is smaller because with the V4-R8 size its local node overflowed the ESP32's internal RAM by 48800 bytes |
 | `LORA_TRANSFER_BUFFER` | `250` | Payload bytes per data packet. Each packet also carries a 2-byte header, and the LoRa maximum is 255 |
-| `RFT_RESPONSE_REPEAT` / `RFT_RESPONSE_GAP_MS` | `5` / `20` | The remote sends its "N packets" reply this many times, this far apart. The local node waits out the repeats (from the radio's actual airtime) before its first packet request |
-| `MOTION_ANNOUNCE_GAP_MS` / `MOTION_ANNOUNCE_TRIES` | `5000` / `6` | `motion = 1`: the remote repeats its announcement this often, this many times, until the first packet request. Covers a local node that is booting, saving or uploading |
-| `MOTION_PACKET_GIVE_UP_MS` | `20000` | `motion = 1`: the local node abandons the transfer when one packet hasn't arrived after this long (the remote has probably gone back to sleep) and keeps what it has |
-| `MOTION_SERVE_IDLE_MS` | `30000` | `motion = 1`: the remote goes back to sleep after this long without a packet request. Must exceed `MOTION_PACKET_GIVE_UP_MS` (checked at build time) |
-| `MOTION_DONE_REPEAT` | `3` | `motion = 1`: the local node sends "done" this many times, `RFT_RESPONSE_GAP_MS` apart |
+| `PKT_MAGIC` | `0xF9` | First byte of every control packet |
+| `PKT_ANNOUNCE_PICTURE` / `PKT_ANNOUNCE_AUDIO` | `0xC2` / `0xC3` | Second byte of the remote's 4-byte announcement: `F9 C2 nL nH` (picture) or `F9 C3 nL nH` (audio) |
+| `PKT_REQUEST` | `0xFE` | Second byte of the base station's packet request, `F9 FE iL iH` |
+| `PKT_DONE` | `0xFA` | Second byte of the base station's "done", `F9 FA` |
+| `ANNOUNCE_REPEAT` / `ANNOUNCE_REPEAT_GAP_MS` | `5` / `20` | The remote sends each announcement this many times, this far apart. The base station waits out the repeats (from the radio's actual airtime) before its first packet request |
+| `ANNOUNCE_GAP_MS` / `ANNOUNCE_TRIES` | `5000` / `6` | The remote repeats its announcement this often, this many times, until the first packet request, then drops the capture and sleeps. Covers a base station that is booting, saving or uploading |
+| `PACKET_GIVE_UP_MS` | `20000` | The base station abandons the transfer when one packet hasn't arrived after this long (the remote has probably gone back to sleep) and keeps what it has |
+| `SERVE_IDLE_MS` | `30000` | The remote goes back to sleep after this long without a packet request. Must exceed `PACKET_GIVE_UP_MS` (checked at build time) |
+| `DONE_REPEAT` | `3` | The base station sends "done" this many times, `ANNOUNCE_REPEAT_GAP_MS` apart |
 
-**Buffers that differ between the two nodes.** If a remote announces more packets than fit the local node's buffer (`packets × 250 > MAX_TRANSFER_BUFFER`, for example a V4-R8 remote with a big picture and a V2 local node), the local node logs `N packets don't fit this board's M-byte buffer; skipped` and requests nothing. With `motion = 1` it still sends "done", so the remote goes to sleep. A V2 local node handles V4-R8 remotes as long as their pictures stay under 72000 bytes (re-encoded pictures are 10–20 KB).
+**Buffers that differ between the two nodes.** If a remote announces more packets than fit the base station's buffer (`packets × 250 > MAX_TRANSFER_BUFFER`, for example a V4-R8 remote with a big picture and a V2 base station), the base station logs `N packets don't fit this board's M-byte buffer; skipped` and requests nothing. It still sends "done", so the remote goes to sleep. A V2 base station handles V4-R8 remotes as long as their pictures stay under 72000 bytes (re-encoded pictures are 10–20 KB).
 
 ## Local node (`src/local/main.cpp`)
 
@@ -209,13 +220,10 @@ Shared constants are in `lib/Board/Board.h`; `MAX_TRANSFER_BUFFER` is per board.
 | `SERVER_URL` | from `auth.h` | Upload target, `http://` only, without a trailing slash. Pictures are PUT to `/image.jpg`, and audio (if enabled) to `/audio.raw`. Non-2xx responses and connection errors are logged as `Upload failed: …`; the file isn't retried (it's on the SD card with `sdcard = 1`) |
 | `UPLOAD_TOKEN` | from `auth.h` | Sent as `Authorization: Bearer <token>`; must match the server's `UPLOAD_TOKEN` ([usage.md](usage.md#1-run-the-upload-server)), or uploads fail with `401` |
 | `WIFI_SSID`, `WIFI_PASS` | from `auth.h` | 2.4 GHz network |
-| `CHECK_EVERY_MS` | `poll_interval` × 1000 (10000) | `motion = 0` only. Pause after a finished transfer before the next request. Set `poll_interval` in `platformio.ini` (see [Motion detection](#motion-detection-pir)) |
-| `MAX_RFT_RESPONSE_MS` | `30000` | `motion = 0` only. How long to wait for the remote node to capture and answer a request. Must exceed the remote's capture time: picture ≈ 2.5 s of fixed delays + the image read (≈ 20 s at 640×480 and 38400 baud, per the original code comment; less at 115200) + 1 s power-off + re-encoding (≈ 1 s [estimate]); audio (if enabled) = `AUDIO_SECONDS` |
-| `REQUEST_TIMER` | `200` | Retries for a request, and per data packet (with `motion = 1` also capped by `MOTION_PACKET_GIVE_UP_MS`). Must fit in a `uint8_t` (≤ 255) |
-| `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255 |
+| `RESPONSE_TIMER` | `200` | Polls (20 ms each) waiting for each data packet, ≈ 4 s. Must be ≤ 255. A packet that doesn't arrive within `PACKET_GIVE_UP_MS` ends the transfer |
 | `WIFI_CONNECT_TIMEOUT_MS` | `20000` | How long `setup()` waits for Wi-Fi before starting without it. The driver keeps reconnecting in the background, and uploads are skipped (`Wi-Fi not connected, upload skipped`) until it's up |
 
-With `motion = 1` (default), every transfer is a **picture** the remote node announced. With `motion = 0` and the default `audio = 0`, every request is for a picture. With `audio = 1`, the first request after boot is for a picture, and the type then alternates between picture and audio after each completed transfer.
+The base station takes the content type from the announcement (`F9 C2` = picture, `F9 C3` = audio) and logs `Picture announced, N packets` or `Audio announced, N packets`. It ignores `motion`, `poll_interval`, `audio` and `test_image`: it only listens, so its firmware needs reflashing only when the protocol or its own settings (Wi-Fi, SD card, display) change.
 
 ## Remote node (`src/remote/main.cpp` and the board header)
 
@@ -227,7 +235,7 @@ Defined in the board header (`lib/Board/HeltecV4R8.h` or `lib/Board/HeltecV2.h`)
 |---|---|---|---|
 | `CAMERATX_BOARDRX` | 47 | 23 | UART1 RX (camera TX) |
 | `CAMERARX_BOARDTX` | 48 | 17 | UART1 TX (camera RX) |
-| `CAMERA_ONOFF` | 41 | 22 | Camera power control, HIGH = on. Held LOW through deep sleep with `motion = 1`. On the V2 it isn't GPIO2 (a strapping pin) |
+| `CAMERA_ONOFF` | 41 | 22 | Camera power control, HIGH = on. Held LOW through deep sleep. On the V2 it isn't GPIO2 (a strapping pin) |
 | `MOTION_PIR` | 6 | 32 | PIR output, HIGH = motion (`motion = 1` only). Must be an RTC GPIO. V2: internal pull-down, power the PIR from 3V3 |
 | `I2S_BCK` | 4 | 13 | Mic bit clock (`audio = 1` only) |
 | `I2S_LRC` | 3 | 12 | Mic word select (`audio = 1` only). V2: GPIO12 is a strapping pin, nothing may pull it HIGH at reset |
@@ -286,7 +294,7 @@ To test the link, the SD card and the upload without a camera, build the **remot
 test_image = 1   ; default 0
 ```
 
-Each capture then skips the camera entirely (it stays switched off) and loads a built-in 640×480 JPEG test card, 22704 bytes (91 packets), from `src/remote/test_image.h`. The picture then follows the camera picture's path: re-encoded on a V4-R8 with `jpeg_quality` > 0, sent unchanged on a V2. The remote logs `test_image = 1: using the built-in 22704-byte test JPEG, camera not used` and shows `Test image...`. With `motion = 0` every request gets the test card (run on two V2s). With `motion = 1` each PIR wake-up sends it; bridging the PIR pin to 3V3 with a jumper simulates motion (not yet run on hardware). Only the remote node uses it; set it back to `0` and reflash the remote before fitting the camera. To use another picture, regenerate the header from any JPEG up to 72000 bytes: `xxd -i < picture.jpg`, wrapped in `static const uint8_t TEST_JPEG[] = { … };`.
+Each capture then skips the camera entirely (it stays switched off) and loads a built-in 640×480 JPEG test card, 22704 bytes (91 packets), from `src/remote/test_image.h`. The picture then follows the camera picture's path: re-encoded on a V4-R8 with `jpeg_quality` > 0, sent unchanged on a V2. The remote logs `test_image = 1: using the built-in 22704-byte test JPEG, camera not used` and shows `Test image...`. With `motion = 0` the test card goes out right after power-on and on every timer wake-up. With `motion = 1` each PIR wake-up sends it; bridging the PIR pin to 3V3 with a jumper simulates motion (not yet run on hardware). Only the remote node uses it, so changing it needs only the remote reflashed; set it back to `0` and reflash the remote before fitting the camera. To use another picture, regenerate the header from any JPEG up to 72000 bytes: `xxd -i < picture.jpg`, wrapped in `static const uint8_t TEST_JPEG[] = { … };`.
 
 ### Image re-encoding
 
@@ -320,10 +328,10 @@ Smaller resolutions and lower quality transfer much faster. See the [image size 
 
 ## Adding a new payload type
 
-The transport moves any byte buffer. To send something else, such as sensor logs (with `motion = 0`, where the local node asks for each payload):
+The transport moves any byte buffer. To send something else, such as sensor logs (the remote always starts the transfer and picks the type):
 
-1. **Remote:** in `loop()`, accept a new second request byte next to `0xFC` (picture) and `0xFD` (audio, reserved even when audio is disabled), for example `0xFB`. `0xFA`, `0xFE` and `0xC2` are already used, see [protocol.md](protocol.md). Fill `transfer_buffer` and set `content_length` (≤ `MAX_TRANSFER_BUFFER`). The existing code after the capture then announces the packet count and serves the packets.
-2. **Local:** send the new byte from `request_transmission()`, which currently sends `0xFC + content_type`. Give it a URL and `Content-Type` in `put_to_server()`.
+1. **Remote:** pick a new announcement type byte next to `PKT_ANNOUNCE_PICTURE` (`0xC2`) and `PKT_ANNOUNCE_AUDIO` (`0xC3`), for example `0xC4` (`F9 C4 nL nH`); `0xF9`, `0xFA` and `0xFE` are already used, see [protocol.md](protocol.md). In `pushCapture()`, fill `transfer_buffer`, set `content_length` (≤ `MAX_TRANSFER_BUFFER`) and pass the new byte to `announce()`. The existing code then announces the packet count and serves the packets.
+2. **Base station:** in `loop()`, accept the new byte in the announcement check and set `content_type` from it. Map the type to a URL, `Content-Type` and file extension in `put_to_server()` (and in the `storageSave()` call in `handle_packets()` for the SD card file name).
 3. **Server:** `loracamera-server` takes the file extension from the last three characters of the URL path (letters and digits only), so `/data.csv` is saved as `MMDDHHMM.csv`. Raise its `MAX_UPLOAD_BYTES` if the payload can exceed 262144 bytes.
 
 Packet formats are listed in [protocol.md](protocol.md).

@@ -6,10 +6,18 @@
 #if LORACAMERA_AUDIO
 #include "driver/i2s.h"
 #endif
-#if LORACAMERA_MOTION
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+
+// What wakes the remote between captures (set in [loracamera]): motion = 1, the PIR;
+// motion = 0, a timer every poll_interval seconds.
+#if !LORACAMERA_MOTION
+#ifndef LORACAMERA_POLL_INTERVAL
+#define LORACAMERA_POLL_INTERVAL 600
+#endif
+static_assert(LORACAMERA_POLL_INTERVAL >= 1 && LORACAMERA_POLL_INTERVAL <= 86400,
+	"poll_interval must be 1-86400 seconds");
 #endif
 
 // Re-encoding of the camera JPEG, set in the [loracamera] section of platformio.ini.
@@ -187,19 +195,18 @@ void setup() {
 	setup_i2s();
 #endif
 	vextOn();
-	displayBegin();
-	displayShow("Remote node", "Starting LoRa...");
+	Serial.printf("loracamera remote station, firmware %s\n", LORACAMERA_VERSION);
+	displayBegin("- Remote Station -");
+	displayShow("Starting LoRa...", "Firmware " LORACAMERA_VERSION);
 	if(!radioBegin()) {
 		Serial.printf("Starting LoRa failed!\n");
-		displayShow("Remote node", "Starting LoRa failed!");
+		displayShow("Starting LoRa failed!");
 		while(1) delay(1000);
 	}
 
 	// Set up the camera.  
 	pinMode(CAMERA_ONOFF, OUTPUT);
-#if LORACAMERA_MOTION
-	gpio_hold_dis((gpio_num_t)CAMERA_ONOFF); // held LOW through deep sleep by sleepUntilMotion()
-#endif
+	gpio_hold_dis((gpio_num_t)CAMERA_ONOFF); // held LOW through deep sleep by sleepUntilNextCapture()
 	Serial1.begin(CAMERA_DEFAULT_BAUD,SERIAL_8N1, CAMERATX_BOARDRX, CAMERARX_BOARDTX);
 	cam = new Adafruit_VC0706(&Serial1);
 #ifdef BOARD_HAS_PSRAM
@@ -215,9 +222,11 @@ void setup() {
 
 	Serial.printf("I have %d free heap\n", ESP.getFreeHeap());
 #if LORACAMERA_MOTION
-	displayShow("Remote node", "LoRa OK", "Sleeps until motion");
+	displayShow("Ready", "LoRa OK", "Sleeps until motion");
 #else
-	displayShow("Remote node", "LoRa OK", "Waiting for requests");
+	char every[32];
+	snprintf(every, sizeof(every), "Wakes every %u s", (unsigned)LORACAMERA_POLL_INTERVAL);
+	displayShow("Ready", "LoRa OK", every);
 #endif
 }
 
@@ -361,26 +370,27 @@ void showSending(uint16_t packet) {
 #endif
 }
 
-// Tell the local node how many data packets to request: F9 C2 nL nH, sent repeatedly.
-void announce(uint16_t packets) {
+// Tell the base station what's ready and how many data packets to request:
+// F9 <type> nL nH, sent ANNOUNCE_REPEAT times.
+void announce(uint8_t type, uint16_t packets) {
 	char line[24];
 	snprintf(line, sizeof(line), "%u packets", packets);
-	displayShow("Announcing", line);
-	lora_buffer[0] = 0xF9;
-	lora_buffer[1] = 0xC2;
+	displayShow("Announcing", type == PKT_ANNOUNCE_AUDIO ? "audio" : "picture", line);
+	lora_buffer[0] = PKT_MAGIC;
+	lora_buffer[1] = type;
 	lora_buffer[2] = u0(packets);
 	lora_buffer[3] = u1(packets);
-	uint8_t send_repeat = RFT_RESPONSE_REPEAT;
+	uint8_t send_repeat = ANNOUNCE_REPEAT;
 	while(send_repeat-- > 0) {
 		radioSend(lora_buffer, 4);
-		delay(RFT_RESPONSE_GAP_MS);
+		delay(ANNOUNCE_REPEAT_GAP_MS);
 	}
 }
 
 // Answer a packet request (F9 FE iL iH) for an existing packet. Returns false, sending
 // nothing, for anything else.
 bool servePacketRequest(const uint8_t *request, size_t packetSize) {
-	if(packetSize != 4 || request[0] != 0xF9 || request[1] != 0xFE) return false;
+	if(packetSize != 4 || request[0] != PKT_MAGIC || request[1] != PKT_REQUEST) return false;
 	uint16_t cd = u(request[2], request[3]); // cd is the # of the packet they want
 	if(LORA_TRANSFER_BUFFER * (uint32_t)cd >= content_length) return false;
 	uint32_t byte_start = LORA_TRANSFER_BUFFER * cd;
@@ -405,16 +415,32 @@ bool servePacketRequest(const uint8_t *request, size_t packetSize) {
 	return true;
 }
 
-#if LORACAMERA_MOTION
-// Take a picture and push it: announce it until the local node starts requesting
-// packets, then serve them until it sends "done" (F9 FA) or goes quiet.
-void pushPicture() {
-	takePicture();
+#if LORACAMERA_AUDIO
+// With audio = 1 (timer wake-ups only) captures alternate picture, audio, picture, ...
+// RTC memory survives deep sleep; it starts at false (a picture) after power-on.
+static RTC_DATA_ATTR bool next_is_audio = false;
+#endif
+
+// Capture (picture, or audio clip every other time with audio = 1) and push it: announce
+// it until the base station starts requesting packets, then serve them until it sends
+// "done" or goes quiet.
+void pushCapture() {
+	uint8_t type = PKT_ANNOUNCE_PICTURE;
+#if LORACAMERA_AUDIO
+	if(next_is_audio) {
+		recordAudio();
+		type = PKT_ANNOUNCE_AUDIO;
+	} else
+#endif
+	{
+		takePicture();
+	}
 	uint16_t packets = packetCount();
 	if(packets == 0) {
-		Serial.printf("No picture to send\n");
+		Serial.printf("Nothing to send\n");
 		return;
 	}
+	const char *what = type == PKT_ANNOUNCE_AUDIO ? "audio" : "picture";
 	uint8_t request[4];
 	uint8_t announcements = 0;
 	bool requested = false;
@@ -424,33 +450,37 @@ void pushPicture() {
 		if(servePacketRequest(request, packetSize)) {
 			requested = true;
 			last = millis();
-		} else if(packetSize == 2 && request[0] == 0xF9 && request[1] == 0xFA) {
+		} else if(packetSize == 2 && request[0] == PKT_MAGIC && request[1] == PKT_DONE) {
 			Serial.printf("Transfer done\n");
 			displayShow("Transfer done");
-			return;
+			break;
 		} else if(requested) {
-			if(millis() - last > MOTION_SERVE_IDLE_MS) {
-				Serial.printf("No request for %u s, stopping\n", MOTION_SERVE_IDLE_MS / 1000);
-				return;
+			if(millis() - last > SERVE_IDLE_MS) {
+				Serial.printf("No request for %u s, stopping\n", SERVE_IDLE_MS / 1000);
+				break;
 			}
-		} else if(announcements == 0 || millis() - last > MOTION_ANNOUNCE_GAP_MS) {
-			if(announcements == MOTION_ANNOUNCE_TRIES) {
-				Serial.printf("The local node never answered; picture dropped\n");
+		} else if(announcements == 0 || millis() - last > ANNOUNCE_GAP_MS) {
+			if(announcements == ANNOUNCE_TRIES) {
+				Serial.printf("The base station never answered; %s dropped\n", what);
 				displayShow("No answer from", "the base station");
 				return;
 			}
-			Serial.printf("Announcing %u bytes in %d packets\n", content_length, packets);
-			announce(packets);
+			Serial.printf("Announcing %s: %u bytes in %d packets\n", what, content_length, packets);
+			announce(type, packets);
 			announcements++;
 			last = millis();
 		}
 		delay(20);
 	}
+#if LORACAMERA_AUDIO
+	next_is_audio = !next_is_audio; // only after the base station took it
+#endif
 }
 
-// Power everything down and deep-sleep until the PIR output goes HIGH. Never returns:
-// the chip restarts at setup() when it wakes.
-void sleepUntilMotion() {
+// Power everything down and deep-sleep until the next capture: the PIR output going HIGH
+// (motion = 1) or the poll_interval timer (motion = 0). Never returns: the chip restarts
+// at setup() when it wakes.
+void sleepUntilNextCapture() {
 	radioSleep();
 	Serial1.end(); // don't drive the camera's RX line while it's unpowered
 	vextOff();
@@ -460,6 +490,7 @@ void sleepUntilMotion() {
 	digitalWrite(CAMERA_ONOFF, LOW);
 	gpio_hold_en((gpio_num_t)CAMERA_ONOFF);
 	gpio_deep_sleep_hold_en();
+#if LORACAMERA_MOTION
 	// The pull-down keeps an unplugged PIR from waking the board; RTC pulls need the
 	// RTC peripherals powered during sleep.
 	esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
@@ -467,51 +498,26 @@ void sleepUntilMotion() {
 	rtc_gpio_pulldown_en((gpio_num_t)MOTION_PIR);
 	esp_sleep_enable_ext1_wakeup(1ULL << MOTION_PIR, ESP_EXT1_WAKEUP_ANY_HIGH);
 	Serial.printf("Sleeping until the PIR on GPIO%d sees motion\n", MOTION_PIR);
+#else
+	esp_sleep_enable_timer_wakeup((uint64_t)LORACAMERA_POLL_INTERVAL * 1000000ULL);
+	Serial.printf("Sleeping %u s until the next picture\n", (unsigned)LORACAMERA_POLL_INTERVAL);
+#endif
 	Serial.flush();
 	esp_deep_sleep_start();
 }
 
 // Runs once per wake-up.
 void loop() {
+#if LORACAMERA_MOTION
+	// After power-on or reset just arm the PIR: pictures are taken on motion only.
 	if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
 		Serial.printf("Motion detected\n");
 		displayShow("Motion detected");
-		pushPicture();
+		pushCapture();
 	}
-	// After power-on or reset, just arm the PIR: pictures are taken on motion only.
-	sleepUntilMotion();
-}
-
 #else
-void loop() { 
-	// Check for inbound packets and respond to them
-	uint8_t request[4];
-	size_t packetSize = radioReceive(request, sizeof(request));
-	if(packetSize == 2) { // probably a request for transmission
-		uint8_t a = request[0];
-		uint8_t b = request[1];
-		delay(20);
-		if(a==0xF9 && (b==0xFC || (LORACAMERA_AUDIO && b==0xFD))) { 
-			// Both load into transfer_buffer, both set content_length
-			// both these take multiple seconds to complete, the local is waiting here
-			if(b==0xFC) { // take picture
-				takePicture();
-			}
-#if LORACAMERA_AUDIO
-			else { // record audio
-				recordAudio();
-			}
+	// Timer wake-up, or power-on: a capture right away confirms the link after installing.
+	pushCapture();
 #endif
-			// Now respond to the RFT with the # of packets to expect
-			uint16_t packets = packetCount();
-			Serial.printf("RFT received. Content length is %d; buffer count %d. Packets to send is %d\n", 
-				content_length, LORA_TRANSFER_BUFFER, packets);
-			announce(packets);
-		}
-	} else {
-		servePacketRequest(request, packetSize);
-	}
-	delay(20);
-
+	sleepUntilNextCapture();
 }
-#endif

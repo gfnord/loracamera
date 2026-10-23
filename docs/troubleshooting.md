@@ -4,12 +4,12 @@
 
 Go through these on the bench, with the boards a few metres apart. At very close range a strong signal can overload the receiver (the V4-R8's front end adds a +21 dB LNA).
 
-1. **Remote radio.** Flash `remote` (V2: `remote_v2`), open `pio device monitor`, press RST. Expect `I have … free heap` and no `LoRa init failed`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and, on a V4-R8, its USB port disappears; that's expected. On a V2 remote the log also says `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`; that's expected too.
-2. **Local radio, SD card and Wi-Fi.** Flash `local` (V2: `local_v2`) with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With the display on, the OLED ends on `Base station ready` with the Wi-Fi and SD card state, or shows `Starting LoRa failed!`.
+1. **Remote radio.** Flash `remote` (V2: `remote_v2`), open `pio device monitor`, press RST. Expect `I have … free heap` and no `Starting LoRa failed!`. With `motion = 1` (default) it then logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and, on a V4-R8, its USB port disappears; that's expected. With `motion = 0` it takes a picture right away, then logs `Sleeping N s until the next picture` and its USB port disappears too. On a V2 remote the log also says `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged`; that's expected too.
+2. **Local radio, SD card and Wi-Fi.** Flash `local` (V2: `local_v2`) with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With the display on, the OLED (top line `- Base Station -`) ends on `Ready` with the Wi-Fi and SD card state, or shows `Starting LoRa failed!`.
 3. **Server.** `curl -X PUT` a file with the bearer token to the upload server from another machine (see [usage.md](usage.md#1-run-the-upload-server)); expect `Saved "…"`.
-4. **Link.** With `motion = 1`, wave a hand in front of the PIR: within ~30 s the local log shows `Motion picture announced, N packets`, then packet progress with RSSI. With `motion = 0` it shows `Receiving rft response, N packets` within ~30 s of booting.
+4. **Link.** Power the base station first or second, either works. With `motion = 0` the remote pushes a picture right after power-on: within ~30 s the local log shows `Picture announced, N packets`, then packet progress with RSSI. With `motion = 1`, wave a hand in front of the PIR: within ~30 s the same line appears.
 5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
-6. **Audio** (only with `audio = 1`, `motion = 0`). After the first picture, the next cycle records audio. Convert the `.raw` file and listen to it.
+6. **Audio** (only with `audio = 1`, `motion = 0`). The remote alternates picture and audio, one per wake-up, so the second wake-up (`poll_interval` seconds after the first) sends audio and the local log shows `Audio announced, N packets`. Convert the `.raw` file and listen to it.
 7. **SD card.** After the first transfer the local log shows `Saved /loracam/000001.jpg (… bytes)`. Check the file on a computer.
 
 ## Build and flash
@@ -18,7 +18,7 @@ Go through these on the bench, with the boards a few metres apart. At very close
 Create `src/local/auth.h` (see [getting-started.md](getting-started.md#wi-fi-credentials-required)).
 
 ### Upload fails with `Failed to connect to ESP32-S3` or `No serial data received`
-- V4-R8: enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing. A remote node built with `motion = 1` is in deep sleep with its USB port gone almost all the time, so it always needs this (or a PIR trigger at the right moment).
+- V4-R8: enter download mode by hand: hold **PRG**, press **RST**, release **PRG**, then retry. Press RST after flashing. A remote node is in deep sleep with its USB port gone almost all the time (in both `motion` modes), so it always needs this (or a wake-up at the right moment).
 - V2: the CP2102 should reset the board into download mode itself. Check the USB cable (some are charge-only), the port (`/dev/ttyUSB0`) and, on Windows, the CP210x driver. If it still fails, use the PRG/RST sequence above.
 - Under WSL2, a V4-R8 re-enumerates when it enters the bootloader. Re-run `usbipd attach --wsl --busid <BUSID>`, or use `--auto-attach`. A V2 (CP2102) needs only the one-time attach.
 - With two boards connected, pass `--upload-port /dev/ttyACMx` (V2: `/dev/ttyUSBx`).
@@ -27,7 +27,7 @@ Create `src/local/auth.h` (see [getting-started.md](getting-started.md#wi-fi-cre
 Add yourself to `dialout`, or install the PlatformIO udev rules (see [getting-started.md](getting-started.md#linux-permissions)).
 
 ### Serial monitor shows nothing
-On a V4-R8 the board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor. A V4-R8 remote node with `motion = 1` only has a USB port while it's awake (power-on, then each PIR trigger); `pio device monitor` reconnects when it comes back, and under WSL2 `usbipd attach --auto-attach` re-attaches it. A V2 talks through the CP2102, so its port stays present while the board sleeps; pass `-p /dev/ttyUSB0` if PlatformIO picks the wrong port.
+On a V4-R8 the board uses native USB CDC, so output written before the host opens the port is lost. Press RST with the monitor running. After an upload, reopen the monitor. A V4-R8 remote node only has a USB port while it's awake (power-on, then each PIR trigger or timer wake-up); `pio device monitor` reconnects when it comes back, and under WSL2 `usbipd attach --auto-attach` re-attaches it. A V2 talks through the CP2102, so its port stays present while the board sleeps; pass `-p /dev/ttyUSB0` if PlatformIO picks the wrong port.
 
 ## Radio
 
@@ -42,26 +42,22 @@ On a V4-R8 the board uses native USB CDC, so output written before the host open
 
 The full list is in RadioLib's `src/TypeDef.h`.
 
-### No `rft response`: the local node keeps printing `Receive timer timed out`
-- Is the remote node powered and does its log show the radio started?
-- Both nodes must be flashed from the **same** `lib/Board/Board.h` (frequency, BW, SF, CR, sync word). Mixed V4-R8 / V2 pairs share these settings; the sync word `0x12` is the same on air for the SX1262 and SX1276. Mixed pairs are untested on hardware.
-- If the request log says `type 1`, the local node was built with `audio = 1`. A remote node built with `audio = 0` ignores audio requests. Use the same `audio` value in `platformio.ini` for both boards.
-- A picture can take ~25 s to capture. The local node waits `MAX_RFT_RESPONSE_MS` (30 s). If you raised the resolution or slowed the camera, raise that limit too.
-- Check the antennas on both boards.
-
-### Motion mode: no pictures arrive
-- Both nodes must be built with the same `motion` value. A local node built with `motion = 0` sends requests that a sleeping remote never hears, and a local node built with `motion = 1` never asks a polling remote.
-- Does the remote wake? Watch its monitor (it reconnects on each wake-up on a V4-R8) or its current draw while waving at the PIR. No wake: check the PIR's 3V3 and GND (`3V3`, not `Ve`, which is off during sleep), and that OUT goes to GPIO6 (GPIO32 on a V2) and reads ~3.3 V while triggered. Some PIRs need up to a minute after power-up before they trigger. The V2's deep-sleep current has not been measured; don't assume the V4-R8 figures.
-- The remote wakes but logs `The local node never answered; picture dropped`: the local node wasn't listening for 30 s, or the link is down. See the radio checks above.
+### No pictures arrive: the local node never logs `Picture announced`
+- Is the remote node powered and does its log show the radio started? Does it wake (see below)? With `motion = 0`, it should push a picture right after power-on, and then every `poll_interval` seconds; a long `poll_interval` (the `platformio.ini` default is 3600) looks like nothing happening.
+- Both nodes must be flashed from the **same** `lib/Board/Board.h` (frequency, BW, SF, CR, sync word) and run the same protocol version: compare the `Firmware <version>` line on both boot screens (serial: `loracamera … station, firmware <version>`). Firmware before 0.2.0, whose base station polled with request-for-transmission packets, never answers the remote's announcements. Mixed V4-R8 / V2 pairs share these settings; the sync word `0x12` is the same on air for the SX1262 and SX1276. Mixed pairs are untested on hardware.
+- The remote logs `Announcing picture: N bytes in M packets` and then `The base station never answered; picture dropped` after ~30 s: the base station wasn't listening or the link is down. Check the antennas on both boards, and that the base station finished booting (it logs `Wi-Fi connected …` or the Wi-Fi problem, then listens).
+- The remote logs `Nothing to send`: the capture failed (camera or buffer), so nothing was announced. See [Remote node](#remote-node).
+- A picture can take ~25 s to capture; the remote announces only after that. Nothing is heard on the link before then.
+- Does the remote wake? Watch its monitor (it reconnects on each wake-up on a V4-R8) or its current draw. With `motion = 1`, wave at the PIR: no wake means checking the PIR's 3V3 and GND (`3V3`, not `Ve`, which is off during sleep), and that OUT goes to GPIO6 (GPIO32 on a V2) and reads ~3.3 V while triggered. Some PIRs need up to a minute after power-up before they trigger. The V2's deep-sleep current has not been measured; don't assume the V4-R8 figures. With `motion = 0` the PIR isn't used.
 - PIR sensors don't see through glass or clear plastic. Mount the lens outside the enclosure.
 
-### Motion mode: pictures all the time
+### `motion = 1`: pictures all the time
 - Something keeps the PIR output HIGH: moving branches, sun-warmed or wind-blown surfaces, a road, an animal sitting in view. The remote wakes again straight after each transfer while the output stays HIGH. Re-aim or mask the PIR lens, or shorten its range.
 - With nothing connected to GPIO6 (GPIO32 on a V2) the internal pull-down keeps the board asleep. If it wakes with no PIR fitted, look for a wiring fault pulling that pin up.
 - A picture or two right after power-up is the PIR settling.
 
 ### `Remote stopped answering; abandoning the transfer at packet N`
-With `motion = 1` the local node gives up after 20 s without the requested packet, saves what it has, and sends "done". The link failed mid-transfer: see "Transfers crawl" below.
+The local node gives up after 20 s (`PACKET_GIVE_UP_MS`) without the requested packet, saves what it has, and sends "done". The link failed mid-transfer: see "Transfers crawl" below.
 
 ### Transfers crawl: many `response timer timeout` or `LoRa receive error: -7`
 `-7` is a CRC error: the packet arrived corrupted. Both messages point to a weak or noisy link:
@@ -97,12 +93,12 @@ The card was removed or failed during a write. The base station remounts before 
 Copy the files off and delete them, or use a bigger card. New files are still uploaded if Wi-Fi is up.
 
 ### `N packets don't fit this board's M-byte buffer; skipped`
-The picture announced by the remote is larger than the local board's transfer buffer (`MAX_TRANSFER_BUFFER`: 125000 bytes on a V4-R8, 72000 on a V2). The local node requests nothing, and with `motion = 1` still sends "done" so the remote sleeps. It only happens with a mixed pair: a V4-R8 remote sending more than 72000 bytes to a V2 local node. Keep `jpeg_quality` enabled on the V4-R8 remote (re-encoded pictures are 10–20 KB) or raise `camera_compression` so the camera JPEG is smaller, or use a V4-R8 as the local node.
+The picture announced by the remote is larger than the local board's transfer buffer (`MAX_TRANSFER_BUFFER`: 125000 bytes on a V4-R8, 72000 on a V2). The local node requests nothing, and still sends "done" so the remote sleeps. It only happens with a mixed pair: a V4-R8 remote sending more than 72000 bytes to a V2 local node. Keep `jpeg_quality` enabled on the V4-R8 remote (re-encoded pictures are 10–20 KB) or raise `camera_compression` so the camera JPEG is smaller, or use a V4-R8 as the local node.
 
 ### OLED stays black
 - The OLED is only driven when the firmware is built with the display on: `display = 1` for V4-R8 environments (default `0`, for boards without a display), `display_v2 = 1` for V2 environments (the default).
 - The OLED is powered from Vext (GPIO40 on a V4-R8, active **LOW**) and reset through GPIO21. On a V2, Vext is GPIO21 (active **LOW**) and reset is GPIO16 (SDA 4, SCL 15). Both are handled by `vextOn()` and `oledReset()`.
-- Both nodes draw a boot screen (`Base station` / `Remote node`) right after power-up. A `motion = 1` remote's screen goes dark when it goes to deep sleep: that's expected.
+- Every screen starts with the role, `- Base Station -` or `- Remote Station -`, from power-up on. The remote's screen goes dark when it goes to deep sleep: that's expected.
 
 ### Uploads never appear on the server
 - With `sdcard = 1` every picture is also on the card, so nothing is lost; copy the missed ones from `/loracam`.
@@ -145,13 +141,13 @@ The IR LEDs switch on by themselves when the camera's photocell sees darkness. L
 The camera stopped answering mid-image, and `takePicture()` retries indefinitely. Power-cycle the remote node and check the camera wiring and supply.
 
 ### Large images are skipped
-- Frames over **256 KB** (`CAMERA_JPEG_MAX`) don't fit the camera buffer: the remote logs `Can't read a … frame` and answers 0 packets. On a V2 the camera buffer is smaller: `Can't read a N-byte frame into the 72000-byte camera buffer`. Raise `camera_compression` (the V2 sends the camera JPEG unchanged).
+- Frames over **256 KB** (`CAMERA_JPEG_MAX`) don't fit the camera buffer: the remote logs `Can't read a … frame` and `Nothing to send`, and announces nothing. On a V2 the camera buffer is smaller: `Can't read a N-byte frame into the 72000-byte camera buffer`. Raise `camera_compression` (the V2 sends the camera JPEG unchanged).
 - After re-encoding, an image must fit **125,000 bytes** (`MAX_TRANSFER_BUFFER`; 72,000 on a V2). Otherwise the camera's JPEG is used if it fits, and if neither fits nothing is sent (`doesn't fit the … transfer buffer`).
 
 The VC0706 library's old 16-bit read offset, which corrupted images over 64 KB, has been widened to 32 bits.
 
 ### Audio is silent or noise
-Audio exists only in builds with `audio = 1` in `platformio.ini`, on **both** nodes.
+Audio exists only in builds with `audio = 1` (and `motion = 0`) in `platformio.ini`, on the **remote** node. The base station needs no setting: it takes the type from the announcement.
 - The firmware reads `I2S_CHANNEL_FMT_ONLY_RIGHT`. The original ESP32 swapped left and right in this mode, and the ESP32-S3 may not. If the file is silent, change it to `I2S_CHANNEL_FMT_ONLY_LEFT` in `src/remote/main.cpp`, or tie the mic's SEL pin to 3V3.
 - Check BCLK → GPIO4, LRCL → GPIO3, DOUT → GPIO6, and that the mic has 3.3 V. On a V2: BCLK → GPIO13, LRCL → GPIO12, DOUT → GPIO39. GPIO12 is a strapping pin: nothing may pull it HIGH at reset.
 - Too quiet or clipping: adjust `GAIN_FACTOR`.

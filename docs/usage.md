@@ -77,12 +77,12 @@ By default WSL2 sits behind NAT, so the ESP32 can't reach a server running insid
 ## 2. Bring up the nodes
 
 1. Attach antennas to **both** boards before powering them.
-2. Power the **remote** node: battery + solar, or USB. With `motion = 1` (default) it initialises the radio, logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and goes to deep sleep; on a V4-R8 its USB serial port disappears until the PIR triggers. With `motion = 0` it stays awake and waits for requests.
-3. Power the **local** node (base station): battery + solar, or USB. It starts the radio (after resetting the OLED, with the display on), mounts the SD card (with `sdcard = 1`) and tries Wi-Fi for up to 20 s. With `motion = 1` it then listens for pictures; with `motion = 0` it sends its first request after `poll_interval` seconds (10 by default). Without Wi-Fi it still collects pictures to the SD card.
+2. Power the **remote** node: battery + solar, or USB. With `motion = 1` (default) it initialises the radio, logs `Sleeping until the PIR on GPIO6 sees motion` (GPIO32 on a V2) and goes to deep sleep; on a V4-R8 its USB serial port disappears until the PIR triggers. With `motion = 0` it takes and pushes a picture right away (the link check after installing), then logs `Sleeping N s until the next picture` (`N` = `poll_interval`) and deep-sleeps; it wakes again every `poll_interval` seconds.
+3. Power the **local** node (base station): battery + solar, or USB. It starts the radio (after resetting the OLED, with the display on), mounts the SD card (with `sdcard = 1`) and tries Wi-Fi for up to 20 s. It then only listens (`Listening for remote` on the display) and never transmits on its own; whatever `motion` the remote uses, the remote starts every transfer. Without Wi-Fi it still collects pictures to the SD card.
 
-The order doesn't matter. With `motion = 1` the remote repeats each announcement for 30 s, which covers the local node's boot; with `motion = 0` the local node keeps retrying until the remote node answers.
+The order doesn't matter. The remote repeats each announcement for 30 s (6 × 5 s), which covers the local node's boot or a previous upload; if nobody answers it drops the picture and sleeps until its next wake-up. With `motion = 0` the first picture is therefore a link check: about half a minute after the remote powers on (capture and re-encoding), the local log shows `Picture announced, N packets`, then packet progress.
 
-To test motion detection, wave a hand in front of the PIR: the remote wakes, and the picture starts arriving at the local node about 25 s later (capture and re-encoding; a V2 remote doesn't re-encode, so its picture is larger than a re-encoded one and takes longer to transfer).
+To test motion detection, wave a hand in front of the PIR: the remote wakes, and the picture starts arriving at the local node about 25 s later (capture and re-encoding; a V2 remote doesn't re-encode, so its picture is larger than a re-encoded one and takes longer to transfer). With `motion = 0` there is no PIR to trigger: power-cycle the remote (or press RST) to get a picture at once instead of waiting for the next `poll_interval`.
 
 ### What the nodes show
 
@@ -96,14 +96,13 @@ rssi: -87
 
 That's the packet just received, the total packet count, and the RSSI of that packet in dBm; the remote shows `Sending`, the packet it just sent and the RSSI of the request. After the transfer the local node shows the size, the SD card result and the upload result. If the radio fails to start, the log and the OLED show `Starting LoRa failed!`. All screens are listed in [configuration.md](configuration.md#oled-display).
 
-**Serial log** of a normal picture cycle with `motion = 1` (`pio device monitor`; the numbers are examples):
+**Serial log** of a normal picture cycle on the local node (`pio device monitor`; the numbers are examples):
 
 ```
 SD card: 30436 MB free, next file 000001
 Wi-Fi connected, IP 192.168.0.42
 I have 123456 free heap
-Motion picture announced, 50 packets
-Got back 50 packets from the rft
+Picture announced, 50 packets
 0 / 50 [0.00%] rssi: -87
 ...
 49 / 50 [98.00%] rssi: -86
@@ -113,23 +112,15 @@ Saved /loracam/000001.jpg (12345 bytes)
 server: 12345 bytes in 0.41s. ...
 ```
 
-With `motion = 0` the first lines of each cycle are the request and its answer instead:
+With `audio = 1` on the remote (`motion = 0`), every other announcement is audio, and the line reads `Audio announced, N packets`; the picture and audio announcements alternate, one per wake-up, starting with a picture after the remote powers on.
 
-```
-Sending request for transmission of type 0...
-Receiving rft response, 50 packets
-if packets! 50
-```
-
-Type 0 is a picture and type 1 is audio. With the default `audio = 0` every request is type 0. With `audio = 1` the types alternate after each completed transfer.
-
-If the remote node stops answering in the middle of a transfer (`motion = 1`), the log shows `Remote stopped answering; abandoning the transfer at packet N` after 20 s, and the truncated picture is saved and uploaded.
+If the remote node stops answering in the middle of a transfer, the log shows `Remote stopped answering; abandoning the transfer at packet N` after 20 s, and the truncated picture is saved and uploaded. The local node still sends "done".
 
 Without Wi-Fi the log shows `Wi-Fi not connected yet to "<SSID>": <reason> (status N); continuing, uploads wait for it` at boot and `Wi-Fi not connected, upload skipped` after each picture (see [troubleshooting](troubleshooting.md#wi-fi-not-connected-yet--wi-fi-not-connected-upload-skipped)).
 
 ### What the remote node logs
 
-Example values, `motion = 1`:
+Example values, `motion = 1` (the V4-R8):
 
 ```
 I have 234567 free heap
@@ -141,20 +132,20 @@ len of frame is 48123
 camera: 48123 bytes in 9.80s. ...
 Turning off camera
 Re-encoded 640x480 grayscale (chroma 3, quality 30): 48123 -> 12345 bytes in 0.90s
-Announcing 12345 bytes in 50 packets
+Announcing picture: 12345 bytes in 50 packets
 Packet 0 was requested. byte_start is 0. content_length 12345
 ...
 Transfer done
 Sleeping until the PIR on GPIO6 sees motion
 ```
 
-On a V2 remote the last line names GPIO32, and there is no `Re-encoded …` line: it logs `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged` at boot and announces the camera JPEG's own size. The V2 build has not been tested on hardware; the log above is the V4-R8's.
+On a V2 remote the last line names GPIO32, and there is no `Re-encoded …` line: it logs `No PSRAM on this board: jpeg_quality is ignored, camera JPEGs are sent unchanged` at boot and announces the camera JPEG's own size. The log above is the V4-R8's; the V2 camera path hasn't been run on hardware.
 
-With `motion = 0` the line before the packet requests is `RFT received. Content length is 12345; buffer count 250. Packets to send is 50`, there is no `Motion detected` / `Transfer done` / `Sleeping …`, and `audio = 1` builds also log `Recording 5 seconds of audio` and `microphone: 110592 bytes in 5.00s. ...`.
+With `motion = 0` there is no `Motion detected` line: the cycle starts at `Turning on camera` (on a timer wake-up, or right after power-on), and the last line is `Sleeping N s until the next picture` (`N` = `poll_interval`). If the camera fails, the log shows `Nothing to send` and nothing is announced. If the base station never answers, the log shows `The base station never answered; picture dropped` after ~30 s. `audio = 1` builds also log `Recording 5 seconds of audio` and `microphone: 110592 bytes in 5.00s. ...` on the audio wake-ups, and announce `Announcing audio: …`.
 
 `reset with 1` means the camera answered and `reset with 0` means it didn't. The `Re-encoded` line shows the size the image was cut to, and whether it went out as grayscale (night) or colour, with the measured chroma (see [configuration.md](configuration.md#image-re-encoding)). With the display on, the remote's OLED shows the same steps.
 
-With `motion = 1` a V4-R8's USB port re-enumerates on every wake-up, so the first lines may be lost before the monitor reconnects. `pio device monitor` reconnects by itself; under WSL2 attach the port with `usbipd attach --wsl --busid <BUSID> --auto-attach` so it follows the board ([getting-started.md](getting-started.md)). A V2 uses a CP2102 USB-UART, so its port doesn't disappear while the board sleeps.
+A V4-R8's USB port re-enumerates on every wake-up (both modes), so the first lines may be lost before the monitor reconnects. `pio device monitor` reconnects by itself; under WSL2 attach the port with `usbipd attach --wsl --busid <BUSID> --auto-attach` so it follows the board ([getting-started.md](getting-started.md)). A V2 uses a CP2102 USB-UART, so its port doesn't disappear while the board sleeps.
 
 ## 3. Use the output files
 
@@ -169,7 +160,7 @@ Both are the same 640×480 JPEG (by default). With re-encoding on (V4-R8 remote)
 
 ### Audio
 
-Only produced when both nodes are built with `audio = 1` (see [configuration.md](configuration.md#audio-capture-optional)).
+Only produced when the remote node is built with `audio = 1` (see [configuration.md](configuration.md#audio-capture-optional)).
 
 `MMDDHHMM.raw` on the server, or `/loracam/NNNNNN.raw` on the base station's SD card, is headerless PCM: **signed 16-bit little-endian, mono, 11025 Hz** (with the defaults in [configuration.md](configuration.md#audio)). The HTTP `Content-Type` header says `audio/L8`, but the data is 16-bit. Convert or play it with:
 
@@ -185,5 +176,5 @@ In Audacity use **File → Import → Raw Data** with *Signed 16-bit PCM*, *Litt
 
 - **Range.** The original V2 build reached ~1 km through dense woods at ~20 dBm with SF7/250 kHz. The V2 firmware now transmits at 17 dBm (the SX1276's maximum continuous power), about 3 dB less than a V4-R8 at its default; range with the new V2 build hasn't been measured. To trade speed for range, raise the spreading factor first (see [configuration.md](configuration.md#range-vs-speed)), then TX power.
 - **Antennas.** Height and line of sight matter more than power. Keep both antennas vertical and away from metal and the battery.
-- **Battery life.** The numbers in this item are for the V4-R8; V2 deep-sleep current and per-picture cost have not been measured. With `motion = 1` (default) the remote node deep-sleeps between motion events (tens of µA [estimate]) and costs ~2–3 mAh per picture, so a small solar panel easily keeps up unless the PIR triggers all day. Aim the PIR away from moving branches, roads and sun-warmed surfaces. With `motion = 0` it never sleeps: about 75 mA in receive, and several hundred mA while transmitting or running the camera; with the default 10 s between pictures a solar-charged battery can't keep up, so raise `poll_interval` in `platformio.ini`. See [battery and solar sizing](hardware.md#battery-and-solar-sizing). The V2 has no solar input: a panel needs an external charge controller ([hardware.md](hardware.md#heltec-v2)).
+- **Battery life.** The numbers in this item are for the V4-R8; V2 deep-sleep current and per-picture cost have not been measured. The remote node deep-sleeps between pictures in both modes (tens of µA [estimate]) and costs ~2–3 mAh per picture. With `motion = 1` (default) a small solar panel easily keeps up unless the PIR triggers all day: aim the PIR away from moving branches, roads and sun-warmed surfaces. With `motion = 0` the cost is set by `poll_interval` (in `platformio.ini`, remote only): about 0.33–0.53 Ah a day at 600 s and 55–90 mAh a day at the `platformio.ini` default of 3600 s [estimate]. See [battery and solar sizing](hardware.md#battery-and-solar-sizing). The V2 has no solar input: a panel needs an external charge controller ([hardware.md](hardware.md#heltec-v2)).
 - **Interference.** Other 915 MHz LoRa devices using sync word `0x12` (private networks) are received too. Packets that don't match the protocol are ignored. Changing `LORA_SYNC_WORD` on both nodes filters most of them out.

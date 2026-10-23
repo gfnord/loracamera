@@ -21,41 +21,54 @@ constexpr uint8_t LORA_CR = 5;           // 4/5
 constexpr uint8_t LORA_SYNC_WORD = 0x12; // private network (same on air for SX1262 and SX1276)
 constexpr uint16_t LORA_PREAMBLE = 8;
 
-// ---- Transfer protocol sizes shared by both nodes ----
+// Firmware version, shown at boot on both nodes. Bump it on every release; nodes must run
+// the same protocol, so check both boards show the same version.
+#define LORACAMERA_VERSION "0.2.0"
+
+// ---- Transfer protocol shared by both nodes ----
+// The remote node always starts a transfer: it wakes (timer with motion = 0, PIR with
+// motion = 1), captures, and announces the capture. The base station only listens,
+// requests the packets one by one, and says "done".
 // MAX_TRANSFER_BUFFER (the largest file a node can send or receive) is set per board.
 constexpr uint8_t LORA_TRANSFER_BUFFER = 250; // payload bytes per data packet (+2 header bytes)
 static_assert(MAX_TRANSFER_BUFFER % LORA_TRANSFER_BUFFER == 0,
 	"MAX_TRANSFER_BUFFER must be a whole number of packets");
-// The remote sends its "N packets" RFT response this many times, this far apart,
-// so one copy survives a collision.
-constexpr uint8_t RFT_RESPONSE_REPEAT = 5;
-constexpr uint32_t RFT_RESPONSE_GAP_MS = 20;
+// Packet types (first byte 0xF9): announcement F9 <type> nL nH, packet request F9 FE iL iH,
+// done F9 FA. Data packets start with the packet index instead (iL iH + payload).
+constexpr uint8_t PKT_MAGIC = 0xF9;
+constexpr uint8_t PKT_ANNOUNCE_PICTURE = 0xC2;
+constexpr uint8_t PKT_ANNOUNCE_AUDIO = 0xC3;
+constexpr uint8_t PKT_REQUEST = 0xFE;
+constexpr uint8_t PKT_DONE = 0xFA;
+// Each announcement goes out ANNOUNCE_REPEAT times, ANNOUNCE_REPEAT_GAP_MS apart, so one
+// copy survives a collision...
+constexpr uint8_t ANNOUNCE_REPEAT = 5;
+constexpr uint32_t ANNOUNCE_REPEAT_GAP_MS = 20;
+// ...and is repeated every ANNOUNCE_GAP_MS until the first packet request arrives, at most
+// ANNOUNCE_TRIES times; then the remote drops the capture and goes back to sleep.
+constexpr uint32_t ANNOUNCE_GAP_MS = 5000;
+constexpr uint8_t ANNOUNCE_TRIES = 6;
+// The base station abandons a transfer when one packet hasn't arrived after this long...
+constexpr uint32_t PACKET_GIVE_UP_MS = 20000;
+// ...and the remote sleeps after this long without a request, or as soon as it gets "done".
+constexpr uint32_t SERVE_IDLE_MS = 30000;
+static_assert(SERVE_IDLE_MS > PACKET_GIVE_UP_MS, "the remote must outlast the base station's retries");
+// The base station sends "done" this many times, ANNOUNCE_REPEAT_GAP_MS apart.
+constexpr uint8_t DONE_REPEAT = 3;
 
-// Audio capture, set by `audio` in the [loracamera] section of platformio.ini.
+// Audio capture, set by `audio` in the [loracamera] section of platformio.ini (remote only;
+// the base station handles audio announcements whatever its own setting).
 #ifndef LORACAMERA_AUDIO
 #define LORACAMERA_AUDIO 0
 #endif
 
-// PIR-triggered pictures, set by `motion` in the [loracamera] section of platformio.ini.
+// What wakes the remote, set by `motion` in the [loracamera] section of platformio.ini
+// (remote only): 0 = a timer every `poll_interval` seconds, 1 = the PIR.
 #ifndef LORACAMERA_MOTION
 #define LORACAMERA_MOTION 0
 #endif
 static_assert(LORACAMERA_MOTION == 0 || LORACAMERA_MOTION == 1, "motion must be 0 or 1");
 static_assert(!(LORACAMERA_MOTION && LORACAMERA_AUDIO), "motion = 1 needs audio = 0");
-
-// ---- Motion mode (motion = 1): the remote wakes on the PIR and pushes the picture ----
-// The remote announces a capture (F9 C2 n) every MOTION_ANNOUNCE_GAP_MS until the first
-// packet request arrives, at most MOTION_ANNOUNCE_TRIES times, then goes back to sleep.
-constexpr uint32_t MOTION_ANNOUNCE_GAP_MS = 5000;
-constexpr uint8_t MOTION_ANNOUNCE_TRIES = 6;
-// The local node abandons a transfer when one packet hasn't arrived after this long...
-constexpr uint32_t MOTION_PACKET_GIVE_UP_MS = 20000;
-// ...and the remote sleeps after this long without a request, or as soon as it gets F9 FA.
-constexpr uint32_t MOTION_SERVE_IDLE_MS = 30000;
-static_assert(MOTION_SERVE_IDLE_MS > MOTION_PACKET_GIVE_UP_MS,
-	"the remote must outlast the local node's retries");
-// The local node sends its "transfer done" packet (F9 FA) this many times, RFT_RESPONSE_GAP_MS apart.
-constexpr uint8_t MOTION_DONE_REPEAT = 3;
 
 // unsigned int packing functions
 inline uint8_t u0(uint16_t in) { return in & 0xFF; }

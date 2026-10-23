@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1010" width="1300" height="1010">
+<rect width="1300" height="1010" fill="#ffffff"/>
+<g font-family="Helvetica, Arial, sans-serif" fill="#1f2328">
+<text x="30" y="40" font-size="22" font-weight="bold">loracamera — Maix Nano camera wiring (Heltec WiFi LoRa 32 V2)</text>
+<text x="30" y="64" font-size="13" fill="#57606a">Remote node (field) with camera_type = maix. PIR and microphone as in hardware.md (Heltec V2), not shown. Schematic, not to scale. Untested on hardware.</text>
+
+<!-- Maix Nano -->
+<rect x="60" y="130" width="320" height="450" rx="10" fill="#f0f6ff" stroke="#0969da" stroke-width="2"/>
+<text x="70" y="158" font-size="15" font-weight="bold">Sipeed Maix Nano</text>
+<text x="70" y="176" font-size="11" fill="#57606a">M1n module (Kendryte K210)</text>
+<text x="70" y="192" font-size="11" fill="#57606a">GC0328 camera on the ribbon</text>
+<text x="70" y="208" font-size="11" fill="#57606a">MaixPy + camera/maix/main.py</text>
+<text x="370" y="246" font-size="11" font-weight="bold" fill="#0969da" text-anchor="end">8-pin header (breakout)</text>
+<rect x="270" y="253" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="276" y="266" font-size="11">GND</text>
+<rect x="270" y="279" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f"/>
+<text x="276" y="292" font-size="11">20</text>
+<rect x="270" y="305" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f"/>
+<text x="276" y="318" font-size="11">15</text>
+<rect x="270" y="331" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f"/>
+<text x="276" y="344" font-size="11">7</text>
+<rect x="270" y="357" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="276" y="370" font-size="11">6  UART TX</text>
+<rect x="270" y="383" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="276" y="396" font-size="11">8  UART RX</text>
+<rect x="270" y="409" width="100" height="18" rx="3" fill="#ffffff" stroke="#8c959f"/>
+<text x="276" y="422" font-size="11">21</text>
+<rect x="270" y="435" width="100" height="18" rx="3" fill="#ffe3e3" stroke="#d1242f"/>
+<text x="276" y="448" font-size="11">VCC (3V3 out)</text>
+<text x="70" y="290" font-size="11" fill="#57606a">printed on the breakout as</text>
+<text x="70" y="306" font-size="11" fill="#57606a">GND 20 15 7 / 6 8 21 VCC</text>
+<text x="70" y="322" font-size="11" fill="#57606a">(the Nano's SP-MOD pads:</text>
+<text x="70" y="338" font-size="11" fill="#57606a">VCC is its 3.3 V rail)</text>
+<text x="370" y="486" font-size="11" font-weight="bold" fill="#0969da" text-anchor="end">power holes on the Nano</text>
+<rect x="270" y="497" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="276" y="510" font-size="11">5V  (input)</text>
+<rect x="270" y="523" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="276" y="536" font-size="11">GND</text>
+<rect x="150" y="560" width="70" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="185" y="574" font-size="11" font-weight="bold" text-anchor="middle">USB-C</text>
+<text x="185" y="600" font-size="11" fill="#57606a" text-anchor="middle">flashing · MaixPy REPL log (IO4/IO5)</text>
+<text x="185" y="616" font-size="11" fill="#57606a" text-anchor="middle">bench power: not with the boost 5 V</text>
+
+<!-- unused pins -->
+<text x="392" y="292" font-size="11" fill="#8c959f">n.c.</text>
+<text x="392" y="318" font-size="11" fill="#8c959f">n.c.</text>
+<text x="392" y="344" font-size="11" fill="#8c959f">n.c.</text>
+<text x="392" y="422" font-size="11" fill="#8c959f">n.c.</text>
+<text x="70" y="500" font-size="11" fill="#57606a">left edge: 5V below pin 18,</text>
+<text x="70" y="516" font-size="11" fill="#57606a">GND below 5V (above RST)</text>
+<line x1="386" y1="438" x2="398" y2="450" stroke="#d1242f" stroke-width="2.5"/>
+<line x1="398" y1="438" x2="386" y2="450" stroke="#d1242f" stroke-width="2.5"/>
+<text x="406" y="448" font-size="11" font-weight="bold" fill="#d1242f">leave open: 3.3 V output, never connect 5 V here</text>
+
+<!-- Heltec V2 -->
+<rect x="860" y="200" width="300" height="460" rx="14" fill="#e9f5ee" stroke="#0b5d3b" stroke-width="3"/>
+<text x="1010" y="226" font-size="15" font-weight="bold" fill="#0b5d3b" text-anchor="middle">Heltec WiFi LoRa 32 V2</text>
+<text x="1010" y="244" font-size="12" fill="#0b5d3b" text-anchor="middle">remote node (remote_v2)</text>
+<rect x="868" y="253" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="874" y="266" font-size="11">GND</text>
+<rect x="868" y="357" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="874" y="370" font-size="11">GPIO23</text>
+<rect x="868" y="383" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="874" y="396" font-size="11">GPIO17</text>
+<rect x="868" y="591" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="874" y="604" font-size="11">GPIO22</text>
+<rect x="868" y="621" width="100" height="18" rx="3" fill="#fff4c2" stroke="#8c959f"/>
+<text x="874" y="634" font-size="11">GND</text>
+<text x="1060" y="380" font-size="12" fill="#57606a" text-anchor="middle">ESP32 (no PSRAM)</text>
+<text x="1060" y="400" font-size="12" fill="#57606a" text-anchor="middle">SX1276 LoRa</text>
+<text x="1060" y="420" font-size="12" fill="#57606a" text-anchor="middle">OLED</text>
+<text x="1060" y="452" font-size="11" fill="#57606a" text-anchor="middle">CAMERATX_BOARDRX = 23</text>
+<text x="1060" y="468" font-size="11" fill="#57606a" text-anchor="middle">CAMERARX_BOARDTX = 17</text>
+<text x="1060" y="484" font-size="11" fill="#57606a" text-anchor="middle">CAMERA_ONOFF = 22</text>
+<rect x="1060" y="650" width="56" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1088" y="664" font-size="11" font-weight="bold" text-anchor="middle">BAT</text>
+<rect x="990" y="650" width="56" height="20" rx="3" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1018" y="664" font-size="11" font-weight="bold" text-anchor="middle">USB</text>
+<text x="1018" y="690" font-size="11" fill="#57606a" text-anchor="middle">flash · serial log (CP2102)</text>
+<rect x="1110" y="196" width="26" height="10" rx="2" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<polyline points="1123,196 1123,164" fill="none" stroke="#1f2328" stroke-width="2"/>
+<polygon points="1112,150 1134,150 1123,164" fill="none" stroke="#1f2328" stroke-width="2"/>
+<text x="1104" y="162" font-size="12" text-anchor="end">915 MHz LoRa antenna</text>
+
+<!-- common ground -->
+<polyline points="380,262 860,262" fill="none" stroke="#1f2328" stroke-width="3"/>
+<circle cx="380" cy="262" r="4" fill="#1f2328"/>
+<circle cx="860" cy="262" r="4" fill="#1f2328"/>
+<text x="420" y="255" font-size="11">GND → GND (common ground, required)</text>
+
+<!-- serial: Maix TX -> GPIO23 -->
+<polyline points="380,366 590,366" fill="none" stroke="#0969da" stroke-width="3"/>
+<rect x="590" y="359" width="40" height="14" rx="2" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+<polyline points="630,366 860,366" fill="none" stroke="#0969da" stroke-width="3"/>
+<circle cx="380" cy="366" r="4" fill="#0969da"/>
+<circle cx="860" cy="366" r="4" fill="#0969da"/>
+<text x="420" y="358" font-size="11" fill="#0969da">IO6 TX → GPIO23</text>
+<text x="610" y="353" font-size="11" fill="#0969da" text-anchor="middle">330 Ω</text>
+
+<!-- serial: GPIO17 -> Maix RX -->
+<polyline points="380,392 590,392" fill="none" stroke="#0969da" stroke-width="3"/>
+<rect x="590" y="385" width="40" height="14" rx="2" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+<polyline points="630,392 860,392" fill="none" stroke="#0969da" stroke-width="3"/>
+<circle cx="380" cy="392" r="4" fill="#0969da"/>
+<circle cx="860" cy="392" r="4" fill="#0969da"/>
+<text x="420" y="410" font-size="11" fill="#0969da">IO8 RX ← GPIO17</text>
+<text x="610" y="414" font-size="11" fill="#0969da" text-anchor="middle">330 Ω</text>
+
+<!-- boost converter -->
+<rect x="480" y="560" width="230" height="150" rx="8" fill="#fff8f0" stroke="#e8740c" stroke-width="2"/>
+<text x="595" y="660" font-size="14" font-weight="bold" text-anchor="middle">5 V boost converter</text>
+<text x="595" y="678" font-size="11" fill="#57606a" text-anchor="middle">≥ 1 A out, EN HIGH = on</text>
+<text x="490" y="604" font-size="11">5V OUT</text>
+<text x="490" y="634" font-size="11">GND</text>
+<text x="700" y="604" font-size="11" font-weight="bold" text-anchor="end">EN</text>
+<text x="700" y="634" font-size="11" text-anchor="end">GND</text>
+<text x="492" y="700" font-size="11">VIN+</text>
+
+<!-- 5 V and GND to the Maix power holes -->
+<polyline points="380,506 430,506 430,600 480,600" fill="none" stroke="#d1242f" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="380" cy="506" r="4" fill="#d1242f"/>
+<polyline points="380,532 410,532 410,630 480,630" fill="none" stroke="#1f2328" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="380" cy="532" r="4" fill="#1f2328"/>
+<text x="438" y="530" font-size="11" fill="#d1242f">5 V → Maix 5V hole</text>
+<text x="438" y="546" font-size="11" fill="#57606a">(M1n: 5.0 V ± 0.2 V, &gt; 300 mA)</text>
+
+<!-- EN and GND to the Heltec -->
+<polyline points="710,600 860,600" fill="none" stroke="#1a7f37" stroke-width="3"/>
+<circle cx="860" cy="600" r="4" fill="#1a7f37"/>
+<text x="720" y="592" font-size="11" font-weight="bold" fill="#1a7f37">GPIO22 → EN</text>
+<polyline points="710,630 860,630" fill="none" stroke="#1f2328" stroke-width="3"/>
+<circle cx="860" cy="630" r="4" fill="#1f2328"/>
+<text x="720" y="648" font-size="11">GND → board GND</text>
+
+<!-- LiPo -->
+<rect x="480" y="780" width="240" height="70" rx="8" fill="#fff8f0" stroke="#e8740c" stroke-width="2"/>
+<text x="600" y="808" font-size="13" font-weight="bold" text-anchor="middle">LiPo cell 3.7 V (protected)</text>
+<text x="600" y="828" font-size="11" fill="#57606a" text-anchor="middle">3.3–4.2 V, JST 1.25 mm 2-pin</text>
+<text x="492" y="845" font-size="14" font-weight="bold" fill="#e8740c">+</text>
+<polyline points="520,710 520,780" fill="none" stroke="#e8740c" stroke-width="3"/>
+<circle cx="520" cy="780" r="4" fill="#e8740c"/>
+<text x="528" y="750" font-size="11" fill="#e8740c">battery + → VIN+ (tap the + lead)</text>
+<polyline points="720,815 1088,815 1088,670" fill="none" stroke="#57606a" stroke-width="3" stroke-linejoin="round"/>
+<text x="900" y="808" font-size="11" fill="#57606a">BAT cable</text>
+
+<!-- legend -->
+<text x="30" y="890" font-size="13" font-weight="bold">Legend</text>
+<polyline points="95,886 123,886" stroke="#d1242f" stroke-width="3"/>
+<text x="129" y="890" font-size="11">5 V (Maix)</text>
+<polyline points="215,886 243,886" stroke="#e8740c" stroke-width="3"/>
+<text x="249" y="890" font-size="11">battery / VIN</text>
+<polyline points="350,886 378,886" stroke="#1f2328" stroke-width="3"/>
+<text x="384" y="890" font-size="11">GND</text>
+<polyline points="430,886 458,886" stroke="#0969da" stroke-width="3"/>
+<text x="464" y="890" font-size="11">camera serial, 3.3 V</text>
+<polyline points="600,886 628,886" stroke="#1a7f37" stroke-width="3"/>
+<text x="634" y="890" font-size="11">camera enable</text>
+<polyline points="740,886 768,886" stroke="#57606a" stroke-width="3"/>
+<text x="774" y="890" font-size="11">JST cable</text>
+<rect x="850" y="879" width="28" height="14" rx="2" fill="#ffffff" stroke="#0969da" stroke-width="2"/>
+<text x="884" y="890" font-size="11">series resistor</text>
+
+<!-- notes -->
+<text x="30" y="920" font-size="12">• VCC on the 8-pin header is the Nano's 3.3 V rail (Maix Nano datasheet: GND 20 15 7 / 6 8 21 3V3). Power the Maix through its 5V hole (or its USB-C on the bench, not both at once).</text>
+<text x="30" y="940" font-size="12">• IO6/IO8 are 3.3 V: no level shifter. The 330 Ω resistors follow the M1n datasheet (100 Ω–1 kΩ on each used IO) and limit current into the unpowered Maix from GPIO17.</text>
+<text x="30" y="960" font-size="12">• IO4/IO5 (USB-C) carry the MaixPy REPL and main.py's log: don't wire them. Pins 20, 15, 7 and 21 are unused.</text>
+<text x="30" y="980" font-size="12">• Boost GND goes to board GND. The boost converter is fed from the battery only, so fit the LiPo even on the bench. Never power a board without its LoRa antenna.</text>
+<text x="30" y="1000" font-size="12">• V2 pins are named by GPIO number: find them on Heltec's V2 pinout. Maix side as printed on the Nano and its breakout.</text>
+</g>
+</svg>

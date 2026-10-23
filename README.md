@@ -4,6 +4,8 @@ transmit images (and optionally sound) over a 915MHz LoRa link to a base station
 
 Hardware: two [Heltec WiFi LoRa 32 V4-R8](https://heltec.org/project/wifi-lora-32-v4/) boards (ESP32-S3R8 + SX1262, with or without the OLED), each with a LiPo and a solar panel; the [Adafruit 613 weatherproof serial camera with IR LEDs](https://www.adafruit.com/product/613) (VC0706); a 3.3 V PIR motion sensor such as the AM312 on the field board; a 3.3 V microSD breakout on the base station; and, for audio only, an [Adafruit I2S MEMS microphone](https://www.adafruit.com/product/3421). The original build (Heltec V2) reached about 1km in a dense wooded place. The Heltec WiFi LoRa 32 V2 (ESP32 + SX1276, no PSRAM) is supported again as an alternative for either node, and the two boards can be mixed (`remote_v2`, `local_v2`). A pair of V2s has run the LoRa link, OLED, Wi-Fi upload and timer wake-ups on the bench with the built-in test picture; the camera, PIR, SD card and audio on the V2, and mixed pairs, are untested. A V2 remote sends the camera JPEG without re-encoding.
 
+Supported cameras: the Adafruit 613 (VC0706, default) and a Sipeed Maix Nano (K210, MaixPy) running [`camera/maix/main.py`](camera/maix/main.py), which emulates the VC0706 (`camera_type = maix`, no night vision, untested on hardware: [docs/maix.md](docs/maix.md)).
+
 ## Wiring
 
 **Remote node (field):**

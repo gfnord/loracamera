@@ -76,7 +76,7 @@ public:
   uint8_t *readPicture(uint8_t n);
   boolean resumeVideo(void);
   uint32_t frameLength(void);
-  char *getVersion(void);
+  char *getVersion(uint8_t timeout = 200);
   uint8_t available();
   uint8_t getDownsize(void);
   boolean setDownsize(uint8_t);

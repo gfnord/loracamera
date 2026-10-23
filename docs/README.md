@@ -7,7 +7,7 @@ flowchart LR
     subgraph Field["Remote node (Heltec V4-R8 or V2)"]
         PIR[PIR motion sensor, motion = 1] -->|wake-up, GPIO6 / GPIO32 on V2| R
         TMR[deep-sleep timer, motion = 0] -->|wake-up every poll_interval| R
-        CAM[VC0706 camera] -->|UART| R[src/remote]
+        CAM[VC0706 camera, or Maix Nano emulating it] -->|UART| R[src/remote]
         MIC[I2S MEMS mic, optional] -.->|I2S| R
         R -.->|display| ROLED[OLED status, optional]
     end
@@ -31,6 +31,7 @@ The remote node spends its time in deep sleep. It wakes on the PIR (`motion = 1`
 | [configuration.md](configuration.md) | Every tunable: `[loracamera]` options (motion detection, audio, OLED, SD card, camera speed and compression, image re-encoding and night grayscale), radio, TX power, timing, pins, server URL; adding new payload types |
 | [usage.md](usage.md) | Running the upload server, deploying the nodes, what you see, the SD card and server files, converting the output |
 | [protocol.md](protocol.md) | LoRa packet formats, transfer sequence, retries, airtime and throughput |
+| [maix.md](maix.md) | Sipeed Maix Nano (K210) camera: how it emulates the VC0706, setup, the PC probe, bench tests, measurements |
 | [troubleshooting.md](troubleshooting.md) | First bring-up checklist and known problems |
 
 ## Repository layout
@@ -44,8 +45,10 @@ src/remote/main.cpp       field side: PIR or timer wake-up and deep sleep, camer
 src/remote/reencode.*     JPEG re-encoding on the ESP32-S3 (quality, night grayscale)
 lib/Board/                Board.h (shared link settings, selects the board header) + per-board HeltecV4R8.*, HeltecV2.* (pins, Vext/OLED, radio and its sleep; KCT8103L front end on the V4-R8)
 lib/Display/              OLED status screen for both nodes (display / display_v2)
-lib/VC0706/               Adafruit VC0706 camera library, slowed down for the ESP32, 32-bit read offset
+lib/VC0706/               Adafruit VC0706 camera library, slowed down for the ESP32, 32-bit read offset, getVersion() with a timeout (Maix boot polling)
 server/                   loracamera-server (Rust): HTTP PUT receiver that saves uploads to disk; Dockerfile, docker-compose.yml
+camera/maix/              MaixPy script for the Sipeed Maix Nano camera: main.py (VC0706 emulator), maix_config.py (optional settings)
+tools/vc0706_probe.py     PC-side test: takes one picture from a VC0706 or the Maix through a USB-to-TTL adapter (uv run)
 ```
 
 ## Status

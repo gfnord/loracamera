@@ -217,15 +217,16 @@ boolean Adafruit_VC0706::setDownsize(uint8_t newsize) {
 /**************************************************************************/
 /*!
     @brief Get firmware version
+    @param timeout Silence that ends the reply, in 10 ms steps (default 200 = 2 s)
     @returns Pointer to buffer containing camera response
 */
 /**************************************************************************/
-char *Adafruit_VC0706::getVersion(void) {
+char *Adafruit_VC0706::getVersion(uint8_t timeout) {
   uint8_t args[] = {0x01};
 
   sendCommand(VC0706_GEN_VERSION, args, 1);
   // get reply
-  if (!readResponse(CAMERABUFFSIZ, 200))
+  if (!readResponse(CAMERABUFFSIZ, timeout))
     return 0;
   camerabuff[bufferLen] = 0; // end it!
   return (char *)camerabuff; // return it!

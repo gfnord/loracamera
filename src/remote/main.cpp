@@ -72,6 +72,51 @@ static_assert(LORACAMERA_CAMERA_BAUD == 38400 || LORACAMERA_CAMERA_BAUD == 11520
 static_assert(LORACAMERA_CAMERA_COMPRESSION >= 0 && LORACAMERA_CAMERA_COMPRESSION <= 255,
 	"camera_compression must be 0-255");
 
+// Camera type, set by `camera_type` in [loracamera]: vc0706 = Adafruit 613; maix = Sipeed
+// Maix Nano (K210) running camera/maix/main.py, which answers the same VC0706 protocol.
+#ifndef LORACAMERA_CAMERA_TYPE
+#define LORACAMERA_CAMERA_TYPE vc0706
+#endif
+#define CAMERA_TYPE_vc0706 1
+#define CAMERA_TYPE_maix 2
+#define CAMERA_TYPE_ID_(t) CAMERA_TYPE_##t
+#define CAMERA_TYPE_ID(t) CAMERA_TYPE_ID_(t)
+#if CAMERA_TYPE_ID(LORACAMERA_CAMERA_TYPE) == CAMERA_TYPE_vc0706
+#define CAMERA_MAIX 0
+#elif CAMERA_TYPE_ID(LORACAMERA_CAMERA_TYPE) == CAMERA_TYPE_maix
+#define CAMERA_MAIX 1
+#else
+#error "camera_type must be vc0706 or maix"
+#endif
+
+#if CAMERA_MAIX
+// Resolution asked of the Maix, set by `maix_resolution` (V4-R8) / `maix_resolution_v2` (V2).
+// The V2 sends the JPEG unchanged, so it defaults to 320x240; the V4-R8 re-encodes anyway.
+#ifndef LORACAMERA_MAIX_RESOLUTION
+#ifdef LORACAMERA_BOARD_HELTEC_V2
+#define LORACAMERA_MAIX_RESOLUTION 320x240
+#else
+#define LORACAMERA_MAIX_RESOLUTION 640x480
+#endif
+#endif
+#define MAIX_RES_640x480 1
+#define MAIX_RES_320x240 2
+#define MAIX_RES_160x120 3
+#define MAIX_RES_ID_(r) MAIX_RES_##r
+#define MAIX_RES_ID(r) MAIX_RES_ID_(r)
+#if MAIX_RES_ID(LORACAMERA_MAIX_RESOLUTION) < 1 || MAIX_RES_ID(LORACAMERA_MAIX_RESOLUTION) > 3
+#error "maix_resolution and maix_resolution_v2 must be 640x480, 320x240 or 160x120"
+#endif
+#define CAMERA_SIZE_(r) VC0706_##r
+#define CAMERA_SIZE(r) CAMERA_SIZE_(r)
+#define CAMERA_IMAGE_SIZE CAMERA_SIZE(LORACAMERA_MAIX_RESOLUTION)
+// MaixPy boots in a few seconds: poll get-version this often, for at most this long.
+#define MAIX_POLL_MS 250
+#define MAIX_BOOT_TIMEOUT_MS 10000
+#else
+#define CAMERA_IMAGE_SIZE VC0706_640x480
+#endif
+
 // Built-in test picture instead of the camera, set by `test_image` in [loracamera].
 #ifndef LORACAMERA_TEST_IMAGE
 #define LORACAMERA_TEST_IMAGE 0
@@ -176,15 +221,54 @@ void speedUpCamera() {
 	}
 }
 
+#if CAMERA_MAIX
+// The text of a get-version reply (76 00 11 00 <len> <text>), or nullptr if it isn't one.
+static const char *versionText(const char *reply) {
+	if(!reply || cam->available() <= 5) return nullptr;
+	const uint8_t *r = (const uint8_t *)reply;
+	if(r[0] != 0x76 || r[1] != 0x00 || r[2] != VC0706_GEN_VERSION || r[3] != 0x00) return nullptr;
+	return reply + 5;
+}
+
+// Wait for MaixPy to boot and camera/maix/main.py to answer: get-version every MAIX_POLL_MS
+// for up to MAIX_BOOT_TIMEOUT_MS, instead of the VC0706's fixed start-up delay. Every other
+// poll goes out at LORACAMERA_CAMERA_BAUD, the speed of a Maix whose power wasn't cut.
+static void waitForMaix() {
+	uint32_t start = millis();
+	for(uint32_t poll = 0; millis() - start < MAIX_BOOT_TIMEOUT_MS; poll++) {
+		uint32_t baud = (poll & 1) ? LORACAMERA_CAMERA_BAUD : CAMERA_DEFAULT_BAUD;
+		uint32_t sent = millis();
+		Serial1.updateBaudRate(baud);
+		const char *text = versionText(cam->getVersion(MAIX_POLL_MS / 10));
+		if(text) {
+			Serial.printf("Camera answered %u ms after power-on, at %u baud: %s\n",
+				(unsigned)(millis() - start), (unsigned)baud, text);
+			if(strstr(text, "Maix")) Serial.printf("Camera: Maix (K210) via VC0706 emulation\n");
+			else Serial.printf("Camera isn't the Maix emulator, but camera_type = maix\n");
+			Serial1.updateBaudRate(CAMERA_DEFAULT_BAUD);
+			return;
+		}
+		uint32_t spent = millis() - sent;
+		if(spent < MAIX_POLL_MS) delay(MAIX_POLL_MS - spent);
+	}
+	Serial.printf("Maix didn't answer within %u ms\n", (unsigned)MAIX_BOOT_TIMEOUT_MS);
+	Serial1.updateBaudRate(CAMERA_DEFAULT_BAUD);
+}
+#endif
+
 void turnOnCamera() {
 	digitalWrite(CAMERA_ONOFF, HIGH); 
+#if CAMERA_MAIX
+	waitForMaix();
+#else
 	delay(1000);
+#endif
 	int t = resetCamera();
 	Serial.printf("Turning on camera; reset with %d\n", t);
 	delay(100);
 	cam->getVersion();
 	delay(100);
-	cam->setImageSize(VC0706_640x480); 
+	cam->setImageSize(CAMERA_IMAGE_SIZE); 
 	delay(100);
 	// Chip register: lost on reset, so set it after resetCamera().
 	cam->setCompression(LORACAMERA_CAMERA_COMPRESSION);

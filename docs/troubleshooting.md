@@ -8,7 +8,7 @@ Go through these on the bench, with the boards a few metres apart. At very close
 2. **Local radio, SD card and Wi-Fi.** Flash `local` (V2: `local_v2`) with a valid `auth.h`. The log must show no `Starting LoRa failed!`, then `SD card: … MB free, next file …` (with `sdcard = 1`) and `Wi-Fi connected, IP …`. With the display on, the OLED (top line `- Base Station -`) ends on `Ready` with the Wi-Fi and SD card state, or shows `Starting LoRa failed!`.
 3. **Server.** `curl -X PUT` a file with the bearer token to the upload server from another machine (see [usage.md](usage.md#1-run-the-upload-server)); expect `Saved "…"`.
 4. **Link.** Power the base station first or second, either works. With `motion = 0` the remote pushes a picture right after power-on: within ~30 s the local log shows `Picture announced, N packets`, then packet progress with RSSI. With `motion = 1`, wave a hand in front of the PIR: within ~30 s the same line appears.
-5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`.
+5. **Camera.** The remote log shows `reset with 1` and `len of frame is …`. With `camera_type = maix` it first shows `Camera: Maix (K210) via VC0706 emulation`; run the Maix tests in [maix.md](maix.md) first.
 6. **Audio** (only with `audio = 1`, `motion = 0`). The remote alternates picture and audio, one per wake-up, so the second wake-up (`poll_interval` seconds after the first) sends audio and the local log shows `Audio announced, N packets`. Convert the `.raw` file and listen to it.
 7. **SD card.** After the first transfer the local log shows `Saved /loracam/000001.jpg (… bytes)`. Check the file on a computer.
 
@@ -111,6 +111,7 @@ The picture announced by the remote is larger than the local board's transfer bu
 ## Remote node
 
 ### `Turning on camera; reset with 0` / `Couldn't take pic`
+- With `camera_type = maix`, see [maix.md](maix.md#troubleshooting) (`Maix didn't answer within 10000 ms` and the Maix's own log).
 - Check the camera supply: it needs **5 V** (up to 325 mA with the IR LEDs on), and GPIO41 (GPIO22 on a V2) must actually switch it. On a LiPo the board has no 5 V rail (see [hardware.md](hardware.md#power)).
 - TX and RX are crossed: camera TX goes to GPIO47 and camera RX to GPIO48. On a V2: camera TX goes to GPIO23 and camera RX to GPIO17.
 - The camera must power up at 38400 baud, its factory default. The firmware never changes the saved speed. If the camera's EEPROM was set to another baud by other software, set it back with that tool.

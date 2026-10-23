@@ -23,6 +23,8 @@ Everything in the wiring diagrams ([remote node](#remote-node-wiring), [base sta
 | Qty | Part | Notes |
 |---|---|---|
 | 1 | [Adafruit 613: weatherproof TTL serial JPEG camera with IR LEDs (VC0706)](https://www.adafruit.com/product/613) | 5 V supply, 3.3 V serial, built-in night vision (see [below](#camera-adafruit-613)). Comes with a 1 m cable with bare leads |
+| 1 | Alternative camera: Sipeed Maix Nano (M1n module, Kendryte K210) with its GC0328 camera, or an OV2640, on the ribbon | Instead of the Adafruit 613, with `camera_type = maix`. Runs MaixPy and `camera/maix/main.py`, which emulates the VC0706. 5 V into its 5V hole (not the 8-pin header's VCC, which is 3.3 V), 3.3 V serial, **no IR LEDs** (see [below](#camera-sipeed-maix-nano)). Plus two 330 Ω resistors for the serial lines. Untested on hardware |
+| 1 | USB-to-TTL serial adapter, 3.3 V logic (bench only) | Maix camera only: to run `tools/vc0706_probe.py` against the Maix from a PC before wiring it to the Heltec ([maix.md](maix.md#test-2-emulator-check-from-a-pc)) |
 | 1 | 5 V boost converter module | ≥ 1 A out, input range covering 3.0–4.2 V, **enable pin that is active-high and accepts 3.3 V logic** (driven by GPIO41 on the V4-R8, GPIO22 on the V2). Wiring in [Power](#power) |
 | 1 | Battery + tap for the boost converter | A Y-split on the battery's + lead, or a soldered tap. The board's headers don't expose the battery voltage |
 | 1 | PIR motion sensor, 3.3 V supply and output, e.g. AM312 | **With `motion = 1` (default)**. Runs from 2.7–12 V on the always-on `3V3` pin; output HIGH (3.3 V) while it sees motion. The HC-SR501 needs ≥ 4.5 V, which a battery-powered board doesn't have. A PIR can't see through glass or clear plastic: mount its lens outside the enclosure, aimed where the camera looks ([wiring](#motion-sensor-pir)) |
@@ -128,6 +130,52 @@ From Adafruit's product sheet:
 | Housing | Weatherproof metal case with a mounting hinge and a 1 m cable (TTL and NTSC video wires) |
 
 The NTSC video output is unused.
+
+### Camera: Sipeed Maix Nano
+
+An alternative to the Adafruit 613: a Sipeed Maix Nano with its Sipeed M1n module (Kendryte K210, dual-core RISC-V at 400 MHz, 8 MB RAM) and the DVP camera on its ribbon: Sipeed ships the Nano with a GC0328 (0.3 MP); an OV2640 also works (main.py detects and logs which). It runs MaixPy and [`camera/maix/main.py`](../camera/maix/main.py), which answers the VC0706 serial protocol, so it uses the Adafruit 613's signals and the same firmware calls. Build the remote with `camera_type = maix`. Setup, the PC probe, the bench tests and the measurements still to take: [maix.md](maix.md). **Untested on hardware.** Sources: [Maix Nano wiki page](https://wiki.sipeed.com/soft/maixpy/en/develop_kit_board/maix_nano.html), Maix Nano and M1n datasheets ([dl.sipeed.com](https://dl.sipeed.com/shareURL/MAIX/HDK/Sipeed-M1n)).
+
+![Wiring diagram: Sipeed Maix Nano 8-pin breakout and 5V hole to a Heltec WiFi LoRa 32 V2, through the 5 V boost converter switched by GPIO22](images/wiring-maix-v2.svg)
+
+The Nano's 8-pin header (Sipeed's SP-MOD pads, often brought out on a breakout) is printed **GND 20 15 7 / 6 8 21 VCC**. Only GND, 6 and 8 are used. **VCC there is the Nano's 3.3 V rail, not a supply input** (the datasheet labels it 3V3): leave it open and never connect 5 V to it. The 5 V input is the **5V hole** on the Nano's left edge (below pin 18, with GND below it), or its USB-C port.
+
+| Maix Nano pin | V2 pin | V4-R8 pin | Define in the board header |
+|---|---|---|---|
+| 6 (8-pin header): IO6, UART TX, out of the Maix | GPIO23, through 330 Ω | GPIO47 (header J2), through 330 Ω | `CAMERATX_BOARDRX` |
+| 8 (8-pin header): IO8, UART RX, into the Maix | GPIO17, through 330 Ω | GPIO48 (header J2), through 330 Ω | `CAMERARX_BOARDTX` |
+| GND (8-pin header) | board GND | board GND (J2 pin 1) | |
+| 5V hole (left edge) | boost converter output +, EN from GPIO22 | boost converter output +, EN from GPIO41 | `CAMERA_ONOFF` |
+| GND hole (left edge, below 5V) | boost converter output − | boost converter output − | |
+| VCC (8-pin header), 20, 15, 7, 21 | not connected | not connected | |
+
+- **3.3 V logic** on IO6/IO8: no level shifter. The M1n datasheet asks for 100 Ω–1 kΩ in series with every IO used; 330 Ω also limits the current the Heltec's TX (GPIO17/48, idle HIGH) pushes into the Maix while it's unpowered.
+- IO6/IO8 are mapped by the FPIOA in main.py (`PIN_TX`, `PIN_RX`). **Never use IO4/IO5**: they are the Maix's USB/ISP UART and the MaixPy REPL, which carries main.py's log.
+- For the bench tests the Maix can run from its own USB-C, with its GND tied to the Heltec's GND and the boost converter's 5 V **disconnected**: don't feed the 5V hole and USB-C at once ([maix.md](maix.md#test-3-heltec-v2-bench)).
+
+| Item | Sipeed Maix Nano | Adafruit 613 |
+|---|---|---|
+| Output | JPEG encoded by main.py at 640×480, 320×240 or 160×120 (`maix_resolution`, `maix_resolution_v2`) | JPEG at 640×480, 320×240 or 160×120 |
+| JPEG quality | `camera_compression` mapped to quality 10–90; re-encoded on the Maix to stay under `max_jpeg_bytes` (60000) | Compression register |
+| Start-up | MaixPy boot, 2–4 s [estimate]; the remote polls until it answers (up to 10 s) | Fixed 1 s delay |
+| Supply at 5 V | 5.0 V ± 0.2 V, more than 300 mA available (M1n datasheet; Maix Nano datasheet: > 1.5 W). Actual draw not measured | 75 mA, 325 mA with the IR LEDs lit |
+| Night vision | **None**: no IR LEDs, no IR-cut filter control | 12 IR LEDs switched by a photocell |
+| Housing | None: needs its own weatherproof enclosure with a window for the lens | Weatherproof metal case |
+| Software | MaixPy-v1, in maintenance mode (below) | Fixed firmware |
+
+**No night vision.** The Maix has no IR LEDs, and the firmware doesn't drive an IR-cut filter. At night pictures depend on ambient light (street lights, moonlight, a lamp) and are mostly black or very noisy. Use the Adafruit 613 where night pictures matter. `night_grayscale` still applies on a V4-R8: dark frames are near-colourless, so they go out as small grayscale JPEGs.
+
+**Power.** The Maix draws more than the Adafruit 613 by day and is on longer per picture (the MaixPy boot), but there's no IR surge at night. The boost converter (≥ 1 A out) covers the datasheets' 300 mA comfortably; keep its output within 4.8–5.2 V, the M1n's supply range. Per picture, all [estimate] until measured ([maix.md](maix.md#measurements)), planning with 150 mA up to the datasheet's 300 mA:
+
+| | V2, 320×240 | V4-R8, 640×480 |
+|---|---|---|
+| Maix on: boot + configuration + 1 s resume + capture and encoding + readout | ~8–15 s | ~13–30 s |
+| Battery current for the Maix (150–300 mA at 5 V, boost ~85 % efficient from 3.7 V) | ~240–480 mA | ~240–480 mA |
+| Charge for the camera | ~0.5–2.0 mAh | ~0.9–4.0 mAh |
+| Adafruit 613 for comparison (13 s, [worked example](#battery-and-solar-sizing)) | 0.43 mAh by day, 1.9 mAh at night | 0.43 mAh by day, 1.9 mAh at night |
+
+The Heltec's own awake time changes little: it waits for the MaixPy boot instead of a fixed 1 s, but saves ~6 s of reply time-outs (main.py pads its get-version and set-port replies, [maix.md](maix.md#how-it-works)). So by day a picture costs up to ~1.6 mAh more on a V2 and up to ~3.6 mAh more on a V4-R8 than with the Adafruit 613; at night between a little less and ~2 mAh more [estimate]. Measure the Maix's current with a USB power meter before sizing the battery.
+
+**MaixPy is in maintenance mode.** Sipeed now develops MaixPy v4 for its MaixCAM boards, which doesn't support the K210, and says the K210 series is being phased out ([Sipeed wiki](https://wiki.sipeed.com/soft/maixpy/en)). MaixPy-v1, the K210 version, last released v0.6.3 in May 2024 ([MaixPy-v1](https://github.com/sipeed/MaixPy-v1)). Expect no new features; keep copies of the firmware and tools that work.
 
 ## Base station wiring
 
@@ -239,7 +287,7 @@ Pick `poll_interval` from the battery budget: charge a day ≈ (86400 / `poll_in
 
 ## Heltec V2
 
-The Heltec WiFi LoRa 32 V2 can run either node, alone or mixed with a V4-R8 (e.g. V2 remote + V4-R8 local; same link settings, and sync word 0x12 is the same on air for the SX1262 and SX1276). **Run as a pair on the bench**: LoRa link, OLED, Wi-Fi upload, deep sleep with timer wake-ups (`motion = 0`) and the built-in test picture work; the camera, PIR wake-up, SD card and audio haven't been run on a V2 yet, nor have mixed pairs. Build and flash with the `remote_v2` and `local_v2` environments (`pio run -e remote_v2 -t upload`, `pio run -e local_v2 -t upload`); plain `pio run` builds only the V4-R8 environments. Pins are defined in `lib/Board/HeltecV2.h`. The wiring diagrams in `docs/images` are V4-R8 only. This page refers to V2 pins by GPIO number only.
+The Heltec WiFi LoRa 32 V2 can run either node, alone or mixed with a V4-R8 (e.g. V2 remote + V4-R8 local; same link settings, and sync word 0x12 is the same on air for the SX1262 and SX1276). **Run as a pair on the bench**: LoRa link, OLED, Wi-Fi upload, deep sleep with timer wake-ups (`motion = 0`) and the built-in test picture work; the camera, PIR wake-up, SD card and audio haven't been run on a V2 yet, nor have mixed pairs. Build and flash with the `remote_v2` and `local_v2` environments (`pio run -e remote_v2 -t upload`, `pio run -e local_v2 -t upload`); plain `pio run` builds only the V4-R8 environments. Pins are defined in `lib/Board/HeltecV2.h`. The wiring diagrams in `docs/images` are V4-R8 only, except `wiring-maix-v2.svg` (Maix Nano camera on a V2, [below](#camera-sipeed-maix-nano)). This page refers to V2 pins by GPIO number only.
 
 | Item | V2 |
 |---|---|
@@ -280,7 +328,7 @@ Pins used by the board itself.
 | Mic 3V / GND (`audio = 1` only) | 3V3 / GND | |
 | Mic SEL (`audio = 1` only) | leave unconnected | |
 
-Camera, camera boost converter and microphone are as on the V4-R8 ([Remote node wiring](#remote-node-wiring), [Power](#power)): `CAMERA_ONOFF` (GPIO22) is a HIGH-on logic signal driving the boost converter's enable pin. The camera UART and I2S pins match the original V2 build; only the camera switch moved (see below). ESP32 pins are 3.3 V only.
+Camera, camera boost converter and microphone are as on the V4-R8 ([Remote node wiring](#remote-node-wiring), [Power](#power)): `CAMERA_ONOFF` (GPIO22) is a HIGH-on logic signal driving the boost converter's enable pin. The camera UART and I2S pins match the original V2 build; only the camera switch moved (see below). ESP32 pins are 3.3 V only. For the Sipeed Maix Nano camera there's a V2 diagram, `images/wiring-maix-v2.svg` ([Camera: Sipeed Maix Nano](#camera-sipeed-maix-nano)).
 
 ### V2 base station wiring
 

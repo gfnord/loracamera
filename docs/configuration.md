@@ -263,6 +263,9 @@ These camera settings live in the `[loracamera]` section of `platformio.ini`. Th
 
 | Setting | Default | Meaning |
 |---|---|---|
+| `camera_type` | `vc0706` | `vc0706`: the Adafruit 613. `maix`: a Sipeed Maix Nano running `camera/maix/main.py`, which emulates the VC0706 on the same wires ([maix.md](maix.md)). Other values fail the build (`camera_type must be vc0706 or maix`) |
+| `maix_resolution` | `640x480` | `camera_type = maix`, V4-R8 remotes: the resolution asked of the Maix, `640x480`, `320x240` or `160x120`. Other values fail the build. The V4-R8 re-encodes the picture anyway |
+| `maix_resolution_v2` | `320x240` | The same for V2 remotes, which send the Maix's JPEG unchanged: 320×240 keeps it well under the 72000-byte buffer |
 | `camera_baud` | `115200` | Serial speed for the picture readout: `38400` or `115200` (the VC0706 maximum). Other values fail the build |
 | `camera_compression` | `54` | VC0706 JPEG compression register, `0`–`255`. `54` (0x36) is the camera's own default; higher means smaller, blockier JPEGs. Out-of-range values fail the build |
 
@@ -272,15 +275,27 @@ How they're applied, on every picture, in `turnOnCamera()`:
 2. `setCompression(camera_compression)` writes the compression register. It's a volatile chip register, so it's set after the reset.
 3. `speedUpCamera()` switches the camera and `Serial1` to `camera_baud`, then checks the link with a version request. On success the remote logs `Camera serial at 115200 baud`. Otherwise it logs `Camera didn't answer at 115200 baud, staying at 38400` and reads the picture at 38400.
 
+With `camera_type = maix` one step comes first: after switching the camera on, `waitForMaix()` sends a get-version request every 250 ms, for up to 10 s (`MAIX_POLL_MS`, `MAIX_BOOT_TIMEOUT_MS`), instead of the VC0706's fixed 1 s delay; every other request goes out at `camera_baud`, in case the Maix's power wasn't cut. On the first answer the remote logs `Camera answered N ms after power-on, at B baud: VC0706 Maix K210 OV2640` and `Camera: Maix (K210) via VC0706 emulation`; with no answer, `Maix didn't answer within 10000 ms`. Steps 1–3 then run unchanged, and the image size sent is `maix_resolution` (`maix_resolution_v2` on a V2).
+
 Picking `camera_compression`:
 - **With re-encoding on (`jpeg_quality` > 0, the default; V4-R8 only):** the camera's JPEG only crosses the serial cable and is then re-compressed, so keep it at `54` for a clean source. Raising it saves serial readout time, but compressing twice adds artifacts.
 - **With re-encoding off (`jpeg_quality = 0`, and always on a V2 remote):** this is the only size control. Raise it until the image gets too blocky (watch `len of frame is …` in the remote log), then back off. On a V2 remote, frames over 72000 bytes are dropped (`Can't read a N-byte frame into the 72000-byte camera buffer`), so raise it if you see that.
+
+#### Maix Nano JPEG quality
+
+With `camera_type = maix`, `camera_compression` sets the quality of the JPEG that main.py encodes on the Maix. 54 maps to quality 50; higher values give lower quality. main.py treats the register as a quantisation scale (54 = 100 %) and inverts the IJG quality rule: quality = 2700 / register from 54 up, 100 − 50 × register / 54 below 54, plus `quality_offset` from `maix_config.py`, clamped to 10–90. The Maix log shows the result (`compression 54 -> JPEG quality 50 (quality_offset 0)`).
+
+| `camera_compression` | 0–10 | 27 | 54 (default) | 80 | 108 | 135 | 200 | 255 |
+|---|---|---|---|---|---|---|---|---|
+| JPEG quality on the Maix | 90 | 75 | 50 | 33 | 25 | 20 | 13 | 10 |
+
+Independently of this, main.py encodes the frame again at a lower quality while the JPEG is over `max_jpeg_bytes` (default 60000, in `maix_config.py`), so a V2 remote doesn't drop it. Picking the value follows the same rules as above: keep 54 when the V4-R8 re-encodes; on a V2, lower the quality (raise the value) or the resolution to cut packets.
 
 Fixed camera settings in `src/remote/main.cpp`:
 
 | Setting | Default | Where |
 |---|---|---|
-| Resolution | `VC0706_640x480` | `turnOnCamera()`; alternatives `VC0706_320x240`, `VC0706_160x120` |
+| Resolution | `VC0706_640x480` | `turnOnCamera()`; alternatives `VC0706_320x240`, `VC0706_160x120`. With `camera_type = maix` it comes from `maix_resolution` / `maix_resolution_v2` instead |
 | Chunk size | 64 bytes | `takePicture()`; the camera buffer is 100 bytes |
 | Camera buffer | `CAMERA_JPEG_MAX` | V4-R8: 256 KB PSRAM buffer the camera's JPEG is read into. Larger frames are skipped. V2: no PSRAM, the JPEG is read straight into the transfer buffer, so the limit is `MAX_TRANSFER_BUFFER` (72000) |
 

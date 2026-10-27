@@ -557,7 +557,10 @@ uint8_t *Adafruit_VC0706::readPicture(uint8_t n) {
     return 0;
 
   // read into the buffer PACKETLEN!
-  if (readResponse(n + 5, CAMERADELAY) == 0)
+  // A short read (the reply stalled mid-way) must not be treated as data: camerabuff
+  // still holds the tail of the previous chunk below bufferLen, and frameptr must not
+  // advance past bytes that were never received.
+  if (readResponse(n + 5, CAMERADELAY) != n + 5)
     return 0;
 
   frameptr += n;

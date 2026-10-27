@@ -2,7 +2,7 @@
 
 The remote node can use a Sipeed Maix Nano (M1n module, Kendryte K210) and its DVP camera (it ships with a GC0328; an OV2640 also works) instead of the Adafruit 613. The Maix runs MaixPy and [`camera/maix/main.py`](../camera/maix/main.py), which answers the VC0706 serial protocol exactly as the Adafruit library in `lib/VC0706` sends it. The remote firmware drives it with the same library calls as the Adafruit 613, so the radio, protocol, base station and server are unchanged. Build the remote with `camera_type = maix` ([configuration.md](configuration.md#camera)).
 
-**Status: untested on hardware.** The emulator and `tools/vc0706_probe.py` have only been run against each other on a PC, with stand-ins for MaixPy's `sensor`, `machine.UART` and `fpioa_manager` modules (Pillow encoding the JPEGs, a pseudo-terminal as the serial link). That checked the replies, byte counts, baud and reset handling, re-encoding to `max_jpeg_bytes`, and recovery from stray bytes, but not MaixPy itself, the sensor or real serial timing. The `remote` and `remote_v2` environments build with `camera_type = maix`. Run the tests below in order; each must pass before the next.
+**Status: bench-tested on a Heltec V2 (2026-10-27).** GC0328 camera, MaixPy v0.5.0-125 (the factory firmware), the Maix powered from its own USB-C: pictures at 320×240 and 640×480 transferred over LoRa, the 640×480 readout verified byte-exact against the FNV-1a hash both nodes log ([Measurements](#measurements)). Not yet tested: the V4-R8 (`remote` environment), power from the boost converter, PIR wake-up with the Maix, an OV2640 sensor, MaixPy v0.6.3. The emulator and `tools/vc0706_probe.py` have only been run against each other on a PC, with stand-ins for MaixPy's `sensor`, `machine.UART` and `fpioa_manager` modules (Pillow encoding the JPEGs, a pseudo-terminal as the serial link). The `remote` and `remote_v2` environments build with `camera_type = maix`. Run the tests below in order; each must pass before the next.
 
 Wiring, BOM and power: [hardware.md](hardware.md#camera-sipeed-maix-nano). MaixPy for the K210 is in maintenance mode ([below](#maixpy-version)).
 
@@ -52,7 +52,7 @@ A command that fails (no sensor, no frame, an unknown register) gets status `04`
 
 **Re-encoding to fit.** If the JPEG is over `max_jpeg_bytes` (default 60000, under the V2's 72000-byte buffer), main.py encodes the same frame again at a lower quality (scaled by how far over it is, at least 5 lower) until it fits, down to quality 10, for at most 1.5 s: the Heltec waits about 2 s for the length. It uses `img.compressed()`, which leaves the RGB565 frame intact; MaixPy's `img.compress()` overwrites the frame with the JPEG ([`py_image.c`](https://github.com/sipeed/MaixPy-v1/blob/master/components/micropython/port/src/omv/py/py_image.c)), so it's only used as a fallback when the heap can't hold a second copy, and then no re-encode is possible. A JPEG still over the limit is served anyway; the V2 drops frames over 72000 bytes.
 
-**Log.** main.py prints a timestamped line (`[maix 3120 ms] …`, milliseconds since the K210 started) for each step on the **USB REPL only** (IO4/IO5, 115200 baud): config, sensor ID and reset time, the first command, end of warm-up, baud changes, compression → quality, capture and encode times, each JPEG size, and the readout time. Nothing but VC0706 replies goes out on IO6/IO8.
+**Log.** main.py prints a timestamped line (`[maix 3120 ms] …`, milliseconds since the K210 started) for each step on the **USB REPL only** (IO4/IO5, 115200 baud): config, sensor ID and reset time, the first command, end of warm-up, baud changes, compression → quality, capture and encode times, each JPEG size, the JPEG's FNV-1a hash when the readout starts, and the readout time. Nothing but VC0706 replies goes out on IO6/IO8.
 
 ## Files
 
@@ -74,7 +74,7 @@ A command that fails (no sensor, no frame, an unknown register) gets status `04`
 
 ## MaixPy version
 
-Use **MaixPy-v1 v0.6.3** (May 2024), the latest K210 release, from [dl.sipeed.com](https://dl.sipeed.com/shareURL/MAIX/MaixPy/release/master); it shortened the camera's start-up. main.py avoids f-strings and other newer Python syntax. Sipeed now develops MaixPy v4 for its MaixCAM boards, which doesn't run on the K210; the K210 line is being phased out and MaixPy-v1 only gets occasional fixes ([Sipeed wiki](https://wiki.sipeed.com/soft/maixpy/en), [MaixPy-v1](https://github.com/sipeed/MaixPy-v1)). Keep a copy of the firmware file and the IDE you tested with.
+Use **MaixPy-v1 v0.6.3** (May 2024), the latest K210 release, from [dl.sipeed.com](https://dl.sipeed.com/shareURL/MAIX/MaixPy/release/master); it shortened the camera's start-up. main.py avoids f-strings and other newer Python syntax. The factory **v0.5.0-125** (2020-08-26) on at least one Nano also runs main.py unchanged (the V2 bench test above used it), but its REPL ignores input while a script runs: to replace main.py, interrupt the boot ([troubleshooting](#the-maix-repl-ignores-input-while-mainpy-runs)). Sipeed now develops MaixPy v4 for its MaixCAM boards, which doesn't run on the K210; the K210 line is being phased out and MaixPy-v1 only gets occasional fixes ([Sipeed wiki](https://wiki.sipeed.com/soft/maixpy/en), [MaixPy-v1](https://github.com/sipeed/MaixPy-v1)). Keep a copy of the firmware file and the IDE you tested with.
 
 ## Test 1: the Maix alone
 
@@ -167,14 +167,14 @@ Untested. The same with the `remote` environment (IO6 → GPIO47, IO8 ← GPIO48
 
 ## Measurements
 
-Fill in from the tests above. Until then the values are estimates.
+Values marked [estimate] are not measured yet; the rest come from the V2 bench test (2026-10-27, GC0328, indoor scene, Maix on USB power).
 
 | Quantity | How to measure | Expected | Measured |
 |---|---|---|---|
-| Boot to first answer | Remote log `Camera answered N ms after power-on` (boost converter powering the Maix), or the probe's `first answer` after a Maix reset | 2–4 s [estimate]: MaixPy start-up, its 200 ms pause for the IDE, `sensor.reset()` | not measured |
-| Readout at 115200 baud | Remote log `camera: N bytes in Xs`, the probe's `read 64-byte chunks` row, main.py's `read out` line | 2.5–3.5 KB/s [estimate]: each 64-byte chunk is a request and a reply, and the library polls in 10 ms steps | not measured |
-| JPEG size, 640×480 (quality 50) | Remote log `len of frame is …` | 25–60 KB [estimate] | not measured |
-| JPEG size, 320×240 (quality 50) | same | 8–20 KB [estimate] | not measured |
+| Boot to first answer | Remote log `Camera answered N ms after power-on` (boost converter powering the Maix), or the probe's `first answer` after a Maix reset | 2–4 s: MaixPy start-up, its 200 ms pause for the IDE, `sensor.reset()` | 2.6 s (cold boot; `sensor.reset()` 1.6 s of it) |
+| Readout at 115200 baud | Remote log `camera: N bytes in Xs`, the probe's `read 64-byte chunks` row, main.py's `read out` line | each 64-byte chunk is a request and a reply, and the library polls in 10 ms steps | 5.2–5.3 KB/s (V2, 40–44 KB frames) |
+| JPEG size, 640×480 (quality 50) | Remote log `len of frame is …` | 25–60 KB [estimate] | 68–75 KB (GC0328; over `max_jpeg_bytes`, so re-encoded, see [below](#pictures-arrive-corrupted-top-decodes-the-rest-is-tiled-noise)) |
+| JPEG size, 320×240 (quality 50) | same | 8–20 KB [estimate] | 2.2–3.3 KB |
 | JPEG size, 160×120 (quality 50) | same | 3–6 KB [estimate] | not measured |
 | Current at 5 V, Maix running | USB power meter on the Maix's 5 V, during the readout | 150–300 mA [estimate]; the M1n datasheet asks for a supply of more than 300 mA | not measured |
 
@@ -195,3 +195,9 @@ The freeze or the encoding failed. The Maix log says why: `no camera sensor` (ri
 
 ### Night pictures are black
 The Maix has no IR LEDs and no IR-cut control; pictures at night need ambient light ([hardware.md](hardware.md#camera-sipeed-maix-nano)).
+
+### Pictures arrive corrupted (top decodes, the rest is tiled noise)
+The camera readout lost its byte alignment: a chunk reply stalled mid-way (the Maix's Python can garbage-collect between the bytes of a reply), the library still accepted it as data, and every later byte shifted. Fixed in three places: `readPicture()` in `lib/VC0706` now rejects a short reply without advancing, the remote firmware drains the camera line and re-reads the same chunk, and main.py sends each reply as one write and collects garbage before the readout instead of during it. Both logs now carry an FNV-1a over the picture: main.py prints `serving N bytes, fnv1a …` when the readout starts, the remote `camera readout hash …` after it — equal hashes mean the readout was byte-exact. A retry in between shows as `problem reading data from camera` on the remote and is normal as long as the hashes match.
+
+### The Maix REPL ignores input while main.py runs
+On MaixPy v0.5.0, typing at the USB REPL (or Ctrl-C) does nothing while a script is running, so main.py can't be stopped from the terminal. To replace it, interrupt the boot: reset the Maix and send Ctrl-C repeatedly during the first second, while `_boot.py` is still deciding to run main.py; a `KeyboardInterrupt` traceback in `_boot.py` followed by `>>>` means the board is at a clean prompt and main.py never started. Over USB, DTR on the REPL interface (the first of the two serial ports) is the reset line and RTS is the boot-mode pin.

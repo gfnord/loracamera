@@ -143,6 +143,18 @@ uint8_t lora_buffer[LORA_TRANSFER_BUFFER + 2]; // +2 for the uint16_t packet num
 uint32_t content_length = 0;
 uint8_t *camera_jpeg = nullptr; // CAMERA_JPEG_MAX bytes: the JPEG as read from the camera
 
+// FNV-1a over the picture as read from the camera: the Maix logs the same hash over the
+// JPEG it serves (camera/maix/main.py), so a mismatch in the two logs localises readout
+// corruption without downloading the image.
+static uint32_t fnv1a(const uint8_t *p, uint32_t n) {
+	uint32_t h = 0x811C9DC5;
+	while(n--) {
+		h ^= *p++;
+		h *= 0x01000193;
+	}
+	return h;
+}
+
 
 #if LORACAMERA_AUDIO
 uint32_t audio_pointer = 0;
@@ -462,12 +474,23 @@ void takePicture() {
 					memcpy(camera_jpeg + idx, camera_buffer, bytesToRead);
 					idx += bytesToRead;
 					remaining -= bytesToRead;      
-				} else {
-					Serial.printf("problem reading data from camera -- read %d bytes\n", idx);
-					delay(100);
+			} else {
+				Serial.printf("problem reading data from camera -- read %d bytes\n", idx);
+				// A chunk reply stalled mid-way (the Maix's Python can pause between the
+				// bytes of a reply): drop whatever still trickles in, until the line has
+				// been quiet for 50 ms (at most 1 s), then ask for the same chunk again.
+				// readPicture() did not advance, so the retry re-reads this range.
+				uint32_t quiet = millis(), drain_end = quiet + 1000;
+				while(millis() < drain_end) {
+					if(Serial1.available()) {
+						(void)Serial1.read();
+						quiet = millis();
+					} else if(millis() - quiet > 50) break;
 				}
 			}
-			print_time("camera", jpglen, pic_time);
+		}
+		print_time("camera", jpglen, pic_time);
+		Serial.printf("camera readout hash %08x\n", (unsigned)fnv1a(camera_jpeg, jpglen));
 		}
 	} else {
 		Serial.printf("Couldn't take pic\n");

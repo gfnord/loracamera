@@ -66,6 +66,14 @@ PADDED_DATA = 100 - 5
 FBUF_MARK = b'\x76\x00\x32\x00\x00'  # sent before and after the data of each frame-buffer read
 MAX_READ = 4096  # longest frame-buffer read served; the library asks for 64 bytes at a time
 
+def fnv1a(data):
+    # Same hash the remote firmware logs over the picture it read (fnv1a in
+    # src/remote/main.cpp): equal values mean the readout was byte-exact.
+    h = 0x811C9DC5
+    for b in data:
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return h
+
 # ---- Timing ----
 STALE_MS = 50  # a command still incomplete this long after its last byte is dropped
 ENCODE_BUDGET_MS = 1500  # stop re-encoding after this: the Heltec waits ~2 s for the length
@@ -361,16 +369,14 @@ class Emulator:
             return
         if offset == 0:
             self.read_start = time.ticks_ms()
+            gc.collect()  # here, not mid-readout: a pause between a reply's bytes reads
+            # as a stall on the Heltec, which drops the chunk and retries.
+            log('serving %d bytes, fnv1a %08x' % (len(jpeg), fnv1a(jpeg)))
         total = len(jpeg)
         end = min(offset + length, total)
-        u = self.uart
-        u.write(FBUF_MARK)
-        if offset < end:
-            u.write(jpeg[offset:end])
         missing = length - max(0, end - offset)
-        if missing > 0:
-            u.write(b'\x00' * missing)  # past the end of the JPEG
-        u.write(FBUF_MARK)
+        # One write, so the reply reaches the Heltec as an unbroken byte stream.
+        self.uart.write(FBUF_MARK + jpeg[offset:end] + b'\x00' * missing + FBUF_MARK)
         if offset + length >= total and self.read_start is not None:
             log('read out %d bytes in %d ms at %d baud' % (total, since(self.read_start), self.baud))
             self.read_start = None

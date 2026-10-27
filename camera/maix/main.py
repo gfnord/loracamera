@@ -290,6 +290,10 @@ class Emulator:
             # write() returns once the last bytes are in the TX FIFO: let them go out first.
             time.sleep_ms(340000 // self.baud + 2)
             self.uart.init(baud, 8, None, 1, timeout=1000, read_buf_len=RX_BUFFER)
+        # MaixPy v0.6.0: the UART constructor and init() clear the FPIOA pin functions,
+        # leaving TX unmapped so the remote hears nothing. Register after both.
+        fm.register(PIN_TX, fm.fpioa.UART1_TX, force=True)
+        fm.register(PIN_RX, fm.fpioa.UART1_RX, force=True)
         self.baud = baud
         log('camera UART at %d baud' % baud)
 

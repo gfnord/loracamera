@@ -251,7 +251,9 @@ static void waitForMaix() {
 		uint32_t baud = (poll & 1) ? LORACAMERA_CAMERA_BAUD : CAMERA_DEFAULT_BAUD;
 		uint32_t sent = millis();
 		Serial1.updateBaudRate(baud);
-		const char *text = versionText(cam->getVersion(MAIX_POLL_MS / 10));
+		// The Maix emulator replies between sensor snapshots; on MaixPy v0.6.0 those can
+		// hold the loop for a few hundred ms, so give each poll a 1 s reply window.
+		const char *text = versionText(cam->getVersion(100));
 		if(text) {
 			Serial.printf("Camera answered %u ms after power-on, at %u baud: %s\n",
 				(unsigned)(millis() - start), (unsigned)baud, text);

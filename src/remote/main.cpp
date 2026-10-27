@@ -631,6 +631,9 @@ void pushCapture() {
 		}
 		delay(20);
 	}
+	// Same hash as after the readout: if it changed during the transfer, something
+	// scribbled over transfer_buffer while the packets were being served.
+	Serial.printf("served hash %08x\n", (unsigned)fnv1a(transfer_buffer, content_length));
 #if LORACAMERA_AUDIO
 	next_is_audio = !next_is_audio; // only after the base station took it
 #endif
